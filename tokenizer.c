@@ -9,6 +9,15 @@ bool consume(char *op) {
 	return true;
 }
 
+// 次のトークンが変数ならTokenを返す
+Token *consume_ident() {
+    Token *tok = token;
+    if (tok->kind != TK_IDENT)
+        return NULL;
+    token = token->next;
+    return tok;
+}
+
 // 次のトークンが期待している記号のときには。トークンを1つ読み進める
 // それ以外の場合にはエラーを報告する。
 void expect(char *op) {
@@ -66,7 +75,7 @@ Token *tokenize() {
 			continue;
 		}
 
-		if (strchr("+-*/()<>", *p)) {
+		if (strchr("+-*/()<>;=", *p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
 		}
@@ -78,6 +87,11 @@ Token *tokenize() {
 			cur->len = p - q;
 			continue;
 		}
+
+        if ('a' <= *p && *p <= 'z') {
+            cur = new_token(TK_IDENT, cur, p++, 1);
+            continue;
+        }
 
 		error_at(p, "invalid token");
 	}

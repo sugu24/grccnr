@@ -1,5 +1,7 @@
 #include "grccnr.h"
 
+Node *code[100];
+
 Node *new_node(NodeKind kind) {
 	Node *node = calloc(1, sizeof(Node));
 	node->kind = kind;
@@ -19,10 +21,33 @@ Node *new_num(int val) {
 	return node;
 }
 
+// ---------- parser ---------- //
+// program = stmt*
+void program() {
+    int i = 0;
+    while (!at_eof())
+        code[i++] = stmt();
+    code[i] = NULL;
+}
 
+// stmt = expr ";"
+Node *stmt() {
+    Node *node = expr();
+    expect(";");
+    return node;
+}
 
+// expr = assign
 Node *expr() {
-	return equality();
+	return assign();
+}
+
+// assign = equality ("=" assign)?
+Node *assign() {
+    Node *node = equality();
+    if (consume("="))
+        node = new_binary(ND_ASSIGN, node, assign());
+    return node;
 }
 
 // equality = relational ("==" relational | "!=" relational)*
@@ -100,6 +125,15 @@ Node *primary() {
 		return node;
 	}
 
-	// それ以外なら数値
+	// それ以外なら数値か変数
+    Token *tok = consume_ident();
+    if (tok) {
+        Node *node = calloc(1, sizeof(Node));
+        node->kind = ND_LVAR;
+        node->offset = (tok->str[0] - 'a' + 1) * 8;
+        return node;
+    }
+
+    // 変数ではないなら数値
 	return new_num(expect_number());
 }
