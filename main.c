@@ -38,7 +38,7 @@ int main(int argc, char** argv){
 	user_input = argv[1];
 	token = tokenize();
 	program();
-
+    
 	// アセンブリの前半部分を出力
 	printf(".intel_syntax noprefix\n");
 	printf(".globl main\n");

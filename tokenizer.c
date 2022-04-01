@@ -36,6 +36,16 @@ int expect_number() {
 	return val;
 }
 
+// トークンの長さを返す
+int token_len(char *p) {
+    int len = 0;
+    while ('a' <= *p && *p <= 'z') {
+        p++;
+        len++;
+    }
+    return len;
+}
+
 bool at_eof() {
 	return token->kind == TK_EOF;
 }
@@ -60,6 +70,7 @@ Token *tokenize() {
 	Token head;
 	head.next = NULL;
 	Token *cur = &head;
+    int len;
 
 	while (*p) {
 		// 空白文字をスキップ
@@ -88,8 +99,10 @@ Token *tokenize() {
 			continue;
 		}
 
-        if ('a' <= *p && *p <= 'z') {
-            cur = new_token(TK_IDENT, cur, p++, 1);
+        // トークンの文字列の長さ確認
+        if (len = token_len(p)) {
+            cur = new_token(TK_IDENT, cur, p, len);
+            p += len;
             continue;
         }
 
