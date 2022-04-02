@@ -18,6 +18,15 @@ Token *consume_ident() {
     return tok;
 }
 
+// 次のトークンがreturnならTokenを返す
+Token *consume_return() {
+    Token *tok = token;
+    if (tok->kind != TK_RETURN)
+        return NULL;
+    token = token->next;
+    return tok;
+}
+
 // 次のトークンが期待している記号のときには。トークンを1つ読み進める
 // それ以外の場合にはエラーを報告する。
 void expect(char *op) {
@@ -36,10 +45,23 @@ int expect_number() {
 	return val;
 }
 
+// アルファベットまたはアンダーバーならtrue
+int is_alpha(char c) {
+    return ('a' <= c && c <= 'z') ||
+           ('A' <= c && c <= 'Z') ||
+           (c == '_');
+}
+
+// 数字ならtrue
+int is_num(char c) {
+    return ('0' <= c && c <= '9');
+}
+
 // トークンの長さを返す
 int token_len(char *p) {
     int len = 0;
-    while ('a' <= *p && *p <= 'z') {
+    while ((len == 0 && is_alpha(*p)) || 
+           (len > 0 && (is_alpha(*p) || is_num(*p)))) {
         p++;
         len++;
     }
@@ -99,9 +121,13 @@ Token *tokenize() {
 			continue;
 		}
 
-        // トークンの文字列の長さ確認
+        // トークンが数字以外なら文字列の長さを取得
         if (len = token_len(p)) {
-            cur = new_token(TK_IDENT, cur, p, len);
+            // トークンはreturn？
+            if (len == 6 && strncmp(p, "return", len) == 0)
+                cur = new_token(TK_RETURN, cur, p, 6);
+            else
+                cur = new_token(TK_IDENT, cur, p, len);
             p += len;
             continue;
         }

@@ -35,15 +35,26 @@ LVar *find_lvar(Token *tok) {
 // program = stmt*
 void program() {
     int i = 0;
-    while (!at_eof())
+    while (!at_eof()) {
         code[i++] = stmt();
+    }    
     code[i] = NULL;
 }
 
 // stmt = expr ";"
 Node *stmt() {
-    Node *node = expr();
-    expect(";");
+    Node *node;
+
+    if (consume_return()) {
+        node = calloc(1, sizeof(Node));
+        node->kind = ND_RETURN;
+        node->lhs = expr();
+    } else {
+        node = expr();
+    }
+
+    if (!consume(";"))
+        error_at(token->str, "';'ではないトークンです");
     return node;
 }
 
@@ -134,7 +145,7 @@ Node *primary() {
 		expect(")");
 		return node;
 	}
-
+    
 	// それ以外なら数値か変数
     Token *tok = consume_ident();
     if (tok) {
