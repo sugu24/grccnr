@@ -3,6 +3,8 @@
 Node *code[100];
 LVar *locals;
 
+int control = 0;
+
 Node *new_node(NodeKind kind) {
 	Node *node = calloc(1, sizeof(Node));
 	node->kind = kind;
@@ -31,6 +33,71 @@ LVar *find_lvar(Token *tok) {
     return NULL;
 }
 
+// stmtがifの場合にBNFに沿ってNodeを生成して、Nodeを返す
+Node *create_if_node() {
+    Node *node = new_node(ND_IF);
+    node->control = control++;
+    if (!consume("("))
+        error_at(token->str, "'('ではないトークンです");
+    node->lhs = expr(); // 条件式
+    if (!consume(")"))
+        error_at(token->str, "')'ではないトークンです");
+    node->stmt1 = stmt();
+    if (consume_kind(TK_ELSE)) {
+        node->is_else = new_node(ND_ELSE);
+        node->stmt2 = stmt();
+    }
+    return node;
+}
+
+// stmtがwhileの場合にBNFに沿ってNodeを生成して、Nodeを返す
+Node *create_while_node() {
+    Node *node = new_node(ND_WHILE);
+    node->control = control++;
+    if (!consume("("))
+        error_at(token->str, "'('でないトークンです");
+    node->lhs = expr(); // 条件式
+    if (!consume(")"))
+        error_at(token->str, "')'でないトークンです");
+    node->stmt1 = stmt();
+    return node;
+}
+
+// stmtがforの場合にBNFに沿ってNodeを生成して、Nodeを返す
+Node *create_for_node() {
+    Node *node = new_node(ND_FOR);
+    node->control = control++;
+    if (!consume("("))
+        error_at(token->str, "'('でないトークンです");
+        
+    if (!consume(";")) { // for (now;;)
+        node->lhs = expr();
+        if (!consume(";"))
+            error_at(token->str, "';'でないトークンです");
+    }
+
+    if (!consume(";")) { // for (;now;)
+        node->mhs = expr();
+        if (!consume(";"))
+            error_at(token->str, "';'でないトークンです");
+    }
+
+    if (!consume(")")) { // for (;;now)
+        node->rhs = expr();
+        if (!consume(")"))
+            error_at(token->str, "')'でないトークンです");
+    }
+    node->stmt1 = stmt();
+    return node;
+}
+
+// // stmtがreturnの場合にBNFに沿ってNodeを生成して、Nodeを返す
+Node *create_return_node() {
+    Node *node = new_node(ND_RETURN);
+    node->lhs = expr();
+    return node;
+}
+
 // ---------- parser ---------- //
 // program = stmt*
 void program() {
@@ -41,14 +108,29 @@ void program() {
     code[i] = NULL;
 }
 
-// stmt = expr ";"
+/* 
+stmt = expr ";"
+     | "if" "(" expr ")" stmt ("else" stmt)?
+     | "while" "(" expr ")" stmt
+     | "for" "(" expr? ";" expr? ";" expr? ")" stmt
+     | "return" expr ";"
+*/
 Node *stmt() {
     Node *node;
 
-    if (consume_return()) {
-        node = calloc(1, sizeof(Node));
-        node->kind = ND_RETURN;
-        node->lhs = expr();
+    if (consume_kind(TK_IF)) {
+        node = create_if_node();
+        return node;
+    } else if (consume_kind(TK_WHILE)) {
+        node = create_while_node();
+        return node;
+    } else if (consume_kind(TK_FOR)) { 
+        node = create_for_node();
+        return node;
+    } 
+    
+    if (consume_kind(TK_RETURN)) {
+        node = create_return_node();
     } else {
         node = expr();
     }
@@ -147,7 +229,7 @@ Node *primary() {
 	}
     
 	// それ以外なら数値か変数
-    Token *tok = consume_ident();
+    Token *tok = consume_kind(TK_IDENT);
     if (tok) {
         Node *node = calloc(1, sizeof(Node));
         node->kind = ND_LVAR;

@@ -3,25 +3,17 @@
 // 次のトークンが期待している記号のときにはトークンを1つ読み進めて
 // 真を返す。それ以外の場合には偽を返す。
 bool consume(char *op) {
-	if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len))
+	if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len)) {
 		return false;
+    }
 	token = token->next;
 	return true;
 }
 
-// 次のトークンが変数ならTokenを返す
-Token *consume_ident() {
+// 次のトークンが指定されたkindならTokenを返す
+Token *consume_kind(TokenKind kind) {
     Token *tok = token;
-    if (tok->kind != TK_IDENT)
-        return NULL;
-    token = token->next;
-    return tok;
-}
-
-// 次のトークンがreturnならTokenを返す
-Token *consume_return() {
-    Token *tok = token;
-    if (tok->kind != TK_RETURN)
+    if (tok->kind != kind)
         return NULL;
     token = token->next;
     return tok;
@@ -121,11 +113,18 @@ Token *tokenize() {
 			continue;
 		}
 
-        // トークンが数字以外なら文字列の長さを取得
+        // トークンが数字以外なら文字列の長さを取得して予約語か変数か判定
         if (len = token_len(p)) {
-            // トークンはreturn？
             if (len == 6 && strncmp(p, "return", len) == 0)
                 cur = new_token(TK_RETURN, cur, p, 6);
+            else if (len == 2 && strncmp(p, "if", len) == 0)
+                cur = new_token(TK_IF, cur, p, 2);
+            else if (len == 4 && strncmp(p, "else", len) == 0)
+                cur = new_token(TK_ELSE, cur, p, 4);
+            else if (len == 5 && strncmp(p, "while", len) == 0)
+                cur = new_token(TK_WHILE, cur, p, 5);
+            else if (len == 3 && strncmp(p, "for", len) == 0)
+                cur = new_token(TK_FOR, cur, p, 3);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;
