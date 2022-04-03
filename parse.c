@@ -33,19 +33,40 @@ LVar *find_lvar(Token *tok) {
     return NULL;
 }
 
-// stmtがifの場合にBNFに沿ってNodeを生成して、Nodeを返す
-Node *create_if_node() {
-    Node *node = new_node(ND_IF);
-    node->control = control++;
+// ---------- if or else if or else ---------- //
+// 初めのif節 BNFに沿ってelse if or else 入り(連結リスト)のNodeを返す 
+Node *create_if_node(int con, int chain) {
+    Node *node;
+    if (chain) {
+        node = new_node(ND_ELSE_IF);
+        node->control = con;
+        node->offset = chain;
+    } else {
+        node = new_node(ND_IF);
+        con = node->control = control++;
+    }
+
     if (!consume("("))
         error_at(token->str, "'('ではないトークンです");
     node->lhs = expr(); // 条件式
     if (!consume(")"))
         error_at(token->str, "')'ではないトークンです");
-    node->stmt1 = stmt();
-    if (consume_kind(TK_ELSE)) {
-        node->is_else = new_node(ND_ELSE);
-        node->stmt2 = stmt();
+    node->stmt = stmt();
+
+    node->next_if_else = NULL; // 明示的にNULLを代入
+    if (consume_kind(TK_ELSE))
+        node->next_if_else = create_else_node(con, chain+1);
+    return node;
+}
+
+// TokenがelseのときにBNFに沿ってelse if or else のNodeを返す
+Node *create_else_node(int con, int chain) {
+    Node *node;
+    if (consume_kind(TK_IF)) 
+        node = create_if_node(con, chain);
+    else {
+        node = new_node(ND_ELSE);
+        node->stmt = stmt();
     }
     return node;
 }
@@ -59,7 +80,7 @@ Node *create_while_node() {
     node->lhs = expr(); // 条件式
     if (!consume(")"))
         error_at(token->str, "')'でないトークンです");
-    node->stmt1 = stmt();
+    node->stmt = stmt();
     return node;
 }
 
@@ -87,7 +108,7 @@ Node *create_for_node() {
         if (!consume(")"))
             error_at(token->str, "')'でないトークンです");
     }
-    node->stmt1 = stmt();
+    node->stmt = stmt();
     return node;
 }
 
@@ -119,7 +140,7 @@ Node *stmt() {
     Node *node;
 
     if (consume_kind(TK_IF)) {
-        node = create_if_node();
+        node = create_if_node(-1,0);
         return node;
     } else if (consume_kind(TK_WHILE)) {
         node = create_while_node();
