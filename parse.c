@@ -33,6 +33,22 @@ LVar *find_lvar(Token *tok) {
     return NULL;
 }
 
+// ND_BLOCKを返す　先頭のstmtはNULL
+Node *create_block_node() {
+    Node *head_node = new_node(ND_BLOCK);
+    Node *cur_node = head_node;
+    Node *next_node;
+    cur_node->next_stmt = NULL;
+    while (!consume("}")) {
+        next_node = calloc(1, sizeof(Node));
+        next_node->stmt = stmt();
+        cur_node->next_stmt = next_node;
+        cur_node = cur_node->next_stmt;
+        cur_node->next_stmt = NULL;
+    }
+    return head_node;
+}
+
 // ---------- if or else if or else ---------- //
 // 初めのif節 BNFに沿ってelse if or else 入り(連結リスト)のNodeを返す 
 Node *create_if_node(int con, int chain) {
@@ -139,7 +155,10 @@ stmt = expr ";"
 Node *stmt() {
     Node *node;
 
-    if (consume_kind(TK_IF)) {
+    if (consume("{")) { // block文
+        node = create_block_node();
+        return node;
+    } else if (consume_kind(TK_IF)) {
         node = create_if_node(-1,0);
         return node;
     } else if (consume_kind(TK_WHILE)) {
@@ -148,9 +167,7 @@ Node *stmt() {
     } else if (consume_kind(TK_FOR)) { 
         node = create_for_node();
         return node;
-    } 
-    
-    if (consume_kind(TK_RETURN)) {
+    } else if (consume_kind(TK_RETURN)) {
         node = create_return_node();
     } else {
         node = expr();

@@ -59,4 +59,9 @@ assert 3 'bar = 3; if (bar == 0) return 0; else return bar;'
 assert 1 'bar = 0; if (bar == 0) bar = 1; else if (bar > 0) bar = bar * 10; return bar;'
 assert 10 'bar = 1; if (bar == 0) bar = 1; else if (bar > 0) bar = bar * 10; return bar;'
 assert 102 'bar = 2; if (bar == 0) return 100; else if (bar == 1) return 101; else if (bar == 2) return 102; else return bar;'
+
+
+assert 0 'bar = 3; if (bar == 3) { bar = bar - 1; bar = bar - 1; bar = bar - 1; } else bar = 10; return bar;'
+assert 10 'bar = 4; if (bar == 3) { bar = bar - 1; bar = bar - 1; bar = bar - 1; } else bar = 10; return bar;'
+
 echo OK

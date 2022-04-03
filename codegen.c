@@ -9,9 +9,24 @@ void gen_lval(Node *node) {
     printf("  push rax\n");
 }
 
+// gen(node->stmt)後にスタックにraxがpushされる
+// gen(node->stmt)後にmainに戻らない場合に使用
+void gen_pop(Node *node) {
+    gen(node);
+    printf("  pop rax\n");
+    return;
+}
+
 // ジェネレータ
 void gen(Node *node) {
 	switch (node->kind) {
+        case ND_BLOCK:
+            while (node->next_stmt) {
+                node = node->next_stmt;
+                gen_pop(node->stmt);
+            }
+            printf("  push 0\n");
+            return;
         case ND_IF:
             gen(node->lhs);
             printf("  pop rax\n");
@@ -22,12 +37,12 @@ void gen(Node *node) {
                 gen(node->stmt);
             } else if (node->next_if_else->kind == ND_ELSE_IF) { //if節の次がelse ifの場合
                 printf("  je .Lelseif%d_1\n", node->control);
-                gen(node->stmt);
+                gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
                 gen(node->next_if_else);
             } else if (node->next_if_else->kind == ND_ELSE) { // if節の次がelse節の場合
                 printf("  je .Lelse%d\n", node->control);
-                gen(node->stmt);
+                gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
                 gen(node->next_if_else);
             }
@@ -45,12 +60,12 @@ void gen(Node *node) {
                 gen(node->stmt);
             } else if (node->next_if_else->kind == ND_ELSE_IF) { // else if節の次がelse if節の場合
                 printf("  je .Lelseif%d_%d\n", node->control, node->offset+1);
-                gen(node->stmt);
+                gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
                 gen(node->next_if_else);
             } else if (node->next_if_else->kind == ND_ELSE) { // else if節の次がelse節の場合
                 printf("  je .Lelse%d\n", node->control);
-                gen(node->stmt);
+                gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
                 gen(node->next_if_else);
             }
@@ -65,21 +80,23 @@ void gen(Node *node) {
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  je  .Lend%d\n", node->control);
-            gen(node->stmt);
+            gen_pop(node->stmt);
             printf("  jmp .Lbegin%d\n", node->control);
             printf(".Lend%d:\n", node->control);
+            printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
             return;
         case ND_FOR:
-            gen(node->lhs);
+            gen_pop(node->lhs);
             printf(".Lbegin%d:\n", node->control);
             gen(node->mhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  je  .Lend%d\n", node->control);
-            gen(node->stmt);
-            gen(node->rhs);
+            gen_pop(node->stmt);
+            gen_pop(node->rhs);
             printf("  jmp .Lbegin%d\n", node->control);
             printf(".Lend%d:\n", node->control);
+            printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
             return;
         case ND_RETURN:
             gen(node->lhs);
