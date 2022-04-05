@@ -4,7 +4,7 @@ assert(){
 	input="$2"
 
 	./grccnr "$input" > temp.s
-	cc -o temp temp.s
+	cc -o temp temp.s link.o
 	./temp
 	actual="$?"
 
@@ -15,6 +15,14 @@ assert(){
 		exit 1
 	fi
 }
+
+
+assert 7 'a = 3; b = 4; return bar2(a,b);'
+assert 12 'a = 3; b = 4; c = 5; return a + b + c;'
+assert 24 'a = 3; b = 4; c = 5; return a + b + c + bar3(a,b,c);'
+assert 19 'a = 3; b = 4; c = 5; return bar2(a,b) + bar3(a,b,c);'
+assert 20 'a = 3; b = 4; c = 5; return bar2(a,c) + bar3(a,b,c);'
+assert 21 'a = 3; b = 4; c = 5; return bar2(c,b) + bar3(a,b,c);'
 
 #assert 42 '42;'
 #assert 41 ' 12 + 34 - 5; '
@@ -63,5 +71,6 @@ assert 102 'bar = 2; if (bar == 0) return 100; else if (bar == 1) return 101; el
 
 assert 0 'bar = 3; if (bar == 3) { bar = bar - 1; bar = bar - 1; bar = bar - 1; } else bar = 10; return bar;'
 assert 10 'bar = 4; if (bar == 3) { bar = bar - 1; bar = bar - 1; bar = bar - 1; } else bar = 10; return bar;'
+
 
 echo OK

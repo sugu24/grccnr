@@ -266,26 +266,44 @@ Node *primary() {
 		return node;
 	}
     
-	// それ以外なら数値か変数
+	// それ以外なら数値(関数)か変数
     Token *tok = consume_kind(TK_IDENT);
     if (tok) {
         Node *node = calloc(1, sizeof(Node));
-        node->kind = ND_LVAR;
-        
-        LVar *lvar = find_lvar(tok);
-        if (lvar) {
-            node->offset = lvar->offset;
-        } else {
-            lvar = calloc(1, sizeof(LVar));
-            lvar->next = locals;
-            lvar->name = tok->str;
-            lvar->len = tok->len;
-            if (locals)
-                lvar->offset = locals->offset + 8;
-            else 
-                lvar->offset = 8;
-            node->offset = lvar->offset;
-            locals = lvar;
+        if (consume("(")) { // 関数の場合
+            node->kind = ND_CALL_FUNC;
+            char *func_name_ = (char*)malloc(sizeof(char) * tok->len);
+            strncpy(func_name_, tok->str, tok->len);
+            node->func_name = func_name_;
+            if (!consume(")")){
+                int i;
+                for (i = 0; ; i++) {
+                    if (i == 6)
+                        error_at(token->str, "引数の個数は7個以上に対応していません");
+                    node->arg[i] = expr();
+
+                    if (consume(",")) {} // 次の引数がある
+                    else if (consume(")")) break; // 引数終了
+                    else error_at(token->str, "引数が正しくありません");
+                }
+            }
+        } else { // 変数の場合
+            node->kind = ND_LVAR;
+            LVar *lvar = find_lvar(tok);
+            if (lvar) { // 既存の変数
+                node->offset = lvar->offset;
+            } else { // 新しい変数
+                lvar = calloc(1, sizeof(LVar));
+                lvar->next = locals;
+                lvar->name = tok->str;
+                lvar->len = tok->len;
+                if (locals)
+                    lvar->offset = locals->offset + 8;
+                else 
+                    lvar->offset = 8;
+                node->offset = lvar->offset;
+                locals = lvar;
+            }
         }
         return node;
     }

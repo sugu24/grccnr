@@ -1,5 +1,7 @@
 #include "grccnr.h"
 
+char *arg_register[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+
 // 変数が示すアドレスをスタックにpushする
 void gen_lval(Node *node) {
     if (node->kind != ND_LVAR)
@@ -19,7 +21,24 @@ void gen_pop(Node *node) {
 
 // ジェネレータ
 void gen(Node *node) {
+    int i;
 	switch (node->kind) {
+        case ND_CALL_FUNC:
+            for (i = 0; i < 6 && node->arg[i]; i++)
+                gen(node->arg[i]);
+            for (i = i - 1; i >= 0; i--)
+                printf("  pop %s\n", arg_register[i]);
+            // call前にrspが16の倍数である必要がある
+            // and rsp, 0xfffff0 で16の倍数にしても
+            // スタックに空洞ができると考えるがだいたい上で実装されている
+            // そこが分からない
+            printf("  mov rax, rsp\n");
+            printf("  and rsp, 0xfffffffffffffff8\n");
+            printf("  push rax\n");
+            printf("  call %s\n", node->func_name);
+            printf("  pop rsp\n");
+            printf("  push rax\n");
+            return;
         case ND_BLOCK:
             while (node->next_stmt) {
                 node = node->next_stmt;
