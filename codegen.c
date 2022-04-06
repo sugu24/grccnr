@@ -2,6 +2,16 @@
 
 char *arg_register[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
+// 関数内のローカル変数のサイズを計算
+int locals_var_size(LVar *loc) {
+    size_t bytes = 0;
+    for (; loc ;) {
+        loc = loc->next;
+        bytes += 8;
+    }
+    return bytes;
+}
+
 // 変数が示すアドレスをスタックにpushする
 void gen_lval(Node *node) {
     if (node->kind != ND_LVAR)
@@ -11,21 +21,31 @@ void gen_lval(Node *node) {
     printf("  push rax\n");
 }
 
-// gen(node->stmt)後にスタックにraxがpushされる
-// gen(node->stmt)後にmainに戻らない場合に使用
+// gen_stmt(node->stmt)後にスタックにraxがpushされる
+// gen_stmt(node->stmt)後にmainに戻らない場合に使用
 void gen_pop(Node *node) {
-    gen(node);
+    gen_stmt(node);
     printf("  pop rax\n");
     return;
 }
 
+// 関数の引数をpushする
+int gen_arg_push(LVar *arg) {
+    if (!arg) return 0;
+    int argc = gen_arg_push(arg->next);
+    printf("  mov rax, rbp\n");
+    printf("  sub rax, %d\n", arg->offset);
+    printf("  mov [rax], %s\n", arg_register[argc]);
+    return argc + 1;
+} 
+
 // ジェネレータ
-void gen(Node *node) {
+void gen_stmt(Node *node) {
     int i;
 	switch (node->kind) {
         case ND_CALL_FUNC:
             for (i = 0; i < 6 && node->arg[i]; i++)
-                gen(node->arg[i]);
+                gen_stmt(node->arg[i]);
             for (i = i - 1; i >= 0; i--)
                 printf("  pop %s\n", arg_register[i]);
             // call前にrspが16の倍数である必要がある
@@ -47,55 +67,55 @@ void gen(Node *node) {
             printf("  push 0\n");
             return;
         case ND_IF:
-            gen(node->lhs);
+            gen_stmt(node->lhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
 
             if (!node->next_if_else) { // if節単体の場合
                 printf("  je .Lend%d\n", node->control);
-                gen(node->stmt);
+                gen_stmt(node->stmt);
             } else if (node->next_if_else->kind == ND_ELSE_IF) { //if節の次がelse ifの場合
                 printf("  je .Lelseif%d_1\n", node->control);
                 gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
-                gen(node->next_if_else);
+                gen_stmt(node->next_if_else);
             } else if (node->next_if_else->kind == ND_ELSE) { // if節の次がelse節の場合
                 printf("  je .Lelse%d\n", node->control);
                 gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
-                gen(node->next_if_else);
+                gen_stmt(node->next_if_else);
             }
 
             printf(".Lend%d:\n", node->control);
             return;
         case ND_ELSE_IF:
             printf(".Lelseif%d_%d:\n", node->control, node->offset);
-            gen(node->lhs);
+            gen_stmt(node->lhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
 
             if (!node->next_if_else) { // else if節の次はない場合
                 printf("  je .Lend%d\n", node->control);
-                gen(node->stmt);
+                gen_stmt(node->stmt);
             } else if (node->next_if_else->kind == ND_ELSE_IF) { // else if節の次がelse if節の場合
                 printf("  je .Lelseif%d_%d\n", node->control, node->offset+1);
                 gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
-                gen(node->next_if_else);
+                gen_stmt(node->next_if_else);
             } else if (node->next_if_else->kind == ND_ELSE) { // else if節の次がelse節の場合
                 printf("  je .Lelse%d\n", node->control);
                 gen_pop(node->stmt);
                 printf("  jmp .Lend%d\n", node->control);
-                gen(node->next_if_else);
+                gen_stmt(node->next_if_else);
             }
             return;
         case ND_ELSE:
             printf(".Lelse%d:\n", node->control);
-            gen(node->stmt);
+            gen_stmt(node->stmt);
             return;
         case ND_WHILE:
             printf(".Lbegin%d:\n", node->control);
-            gen(node->lhs);
+            gen_stmt(node->lhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  je  .Lend%d\n", node->control);
@@ -107,7 +127,7 @@ void gen(Node *node) {
         case ND_FOR:
             gen_pop(node->lhs);
             printf(".Lbegin%d:\n", node->control);
-            gen(node->mhs);
+            gen_stmt(node->mhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  je  .Lend%d\n", node->control);
@@ -118,7 +138,7 @@ void gen(Node *node) {
             printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
             return;
         case ND_RETURN:
-            gen(node->lhs);
+            gen_stmt(node->lhs);
             printf("  pop rax\n");
             printf("  mov rsp, rbp\n");
             printf("  pop rbp\n");
@@ -135,7 +155,7 @@ void gen(Node *node) {
             return;
         case ND_ASSIGN:
             gen_lval(node->lhs);
-            gen(node->rhs);
+            gen_stmt(node->rhs);
 
             printf("  pop rdi\n");
             printf("  pop rax\n");
@@ -144,8 +164,8 @@ void gen(Node *node) {
             return;
     }
 
-	gen(node->lhs);
-	gen(node->rhs);
+	gen_stmt(node->lhs);
+	gen_stmt(node->rhs);
 
 	printf("  pop rdi\n");
 	printf("  pop rax\n");
@@ -188,4 +208,25 @@ void gen(Node *node) {
 
 	printf("  push rax\n");
 	return;
+}
+
+// 関数のジェネレータ
+void gen_func(Func *func) {
+    printf("%s:\n", func->func_name);
+
+    // プロローグ
+    printf("  push rbp\n");
+    printf("  mov rbp, rsp\n");
+    printf("  sub rsp, %d\n", locals_var_size(func->locals));
+
+    // 引数をpush
+    gen_arg_push(func->arg); 
+
+    gen_stmt(func->stmt);
+    printf("  pop rax\n");
+
+    // エピローグ
+    printf("  mov rsp, rbp\n");
+    printf("  pop rbp\n");
+    printf("  ret\n");
 }

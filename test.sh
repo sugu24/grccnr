@@ -4,7 +4,7 @@ assert(){
 	input="$2"
 
 	./grccnr "$input" > temp.s
-	cc -o temp temp.s link.o
+	cc -o temp temp.s
 	./temp
 	actual="$?"
 
@@ -15,6 +15,16 @@ assert(){
 		exit 1
 	fi
 }
+
+assert 3 'main() { a = 1; b = 2; return a + b; }'
+assert 3 'main() { return 3; }'
+assert 30 'foo(a) { return a + 5; } main() { return foo(10) + foo(10); }'
+assert 15 'bar(a,b) { return a * 10 + b; } main() { return bar(1,5); }'
+assert 11 'bar(a,b) { return a * 10 + b; } main() { c = bar(1,1); return c; }'
+assert 11 'bar(a,b) { return a * 10 + b; } main() { a = bar(1,1); return a; }'
+assert 15 'bar(a,b) { aaa = a * 10 + b;return aaa; } main() { return bar(1,5); }'
+assert 8 'fib(a) { if (a <= 1) return 1; else return fib(a-1) + fib(a-2); } main() { return fib(5); }'
+
 
 
 assert 7 'a = 3; b = 4; return bar2(a,b);'

@@ -23,7 +23,7 @@ Token *consume_kind(TokenKind kind) {
 // それ以外の場合にはエラーを報告する。
 void expect(char *op) {
 	if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len))
-		error_at(token->str, "expected '%c'", op);
+		error_at(token->str, "expected '%s'", op);
 	token = token->next;
 }
 

@@ -1,6 +1,6 @@
 #include "grccnr.h"
 
-Node *code[100];
+Func *code[1024];
 LVar *locals;
 
 int control = 0;
@@ -135,14 +135,71 @@ Node *create_return_node() {
     return node;
 }
 
+// 変数の宣言 失敗なら途中でexitされる
+void declare_var(Token *tok) {
+    if (!tok)
+        error_at(tok->str, "変数の宣言である必要があります");
+    
+    LVar *lvar = find_lvar(tok);
+    if (lvar)
+        error_at(tok->str, "既に宣言された変数名です");
+    
+    lvar = calloc(1, sizeof(LVar));
+    lvar->next = locals;
+    lvar->name = tok->str;
+    lvar->len = tok->len;
+    if (locals)
+        lvar->offset = locals->offset + 8;
+    else
+        lvar->offset = 8;
+    locals = lvar;
+}
+
+// 関数名を(までヒープ領域にコピーしてそれを指す
+char *str_copy(Token *tok) {
+    char *temp = (char*)malloc(sizeof(char) * (tok->len + 1));
+    strncpy(temp, tok->str, tok->len);
+    temp[tok->len] = '\0';
+    return temp;
+}
+
 // ---------- parser ---------- //
 // program = stmt*
 void program() {
     int i = 0;
     while (!at_eof()) {
-        code[i++] = stmt();
+        code[i++] = glbstmt();
     }    
     code[i] = NULL;
+}
+
+Func *glbstmt() {
+    Func *func;
+    Token *tok = consume_kind(TK_IDENT);
+    if (tok) { // 関数の場合
+        func = calloc(1, sizeof(func));
+        // 関数名
+        func->func_name = str_copy(tok);
+        // ローカル変数の初期化
+        locals = NULL;
+        expect("(");
+        for (int i = 0; ; i++) {
+            if (i == 6)
+                error_at(token->str, "引数が7つ以上に対応していません");
+            
+            tok = consume_kind(TK_IDENT);
+            if (tok) declare_var(tok);
+            else if (consume(",")) {}
+            else if (consume(")")) break;
+            else error_at(token->str, "変数宣言か','か')'である必要があります");
+        }
+        func->arg = locals;
+        func->stmt = stmt();
+        func->locals = locals;
+    } else 
+        error_at(token->str, "関数名ではありません"); 
+    
+    return func;
 }
 
 /* 
@@ -154,7 +211,7 @@ stmt = expr ";"
 */
 Node *stmt() {
     Node *node;
-
+    
     if (consume("{")) { // block文
         node = create_block_node();
         return node;
@@ -172,7 +229,7 @@ Node *stmt() {
     } else {
         node = expr();
     }
-
+    
     if (!consume(";"))
         error_at(token->str, "';'ではないトークンです");
     return node;
@@ -272,9 +329,7 @@ Node *primary() {
         Node *node = calloc(1, sizeof(Node));
         if (consume("(")) { // 関数の場合
             node->kind = ND_CALL_FUNC;
-            char *func_name_ = (char*)malloc(sizeof(char) * tok->len);
-            strncpy(func_name_, tok->str, tok->len);
-            node->func_name = func_name_;
+            node->func_name = str_copy(tok);
             if (!consume(")")){
                 int i;
                 for (i = 0; ; i++) {
