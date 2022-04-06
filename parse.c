@@ -136,15 +136,8 @@ Node *create_return_node() {
 }
 
 // 変数の宣言 失敗なら途中でexitされる
-void declare_var(Token *tok) {
-    if (!tok)
-        error_at(tok->str, "変数の宣言である必要があります");
-    
-    LVar *lvar = find_lvar(tok);
-    if (lvar)
-        error_at(tok->str, "既に宣言された変数名です");
-    
-    lvar = calloc(1, sizeof(LVar));
+int declare_var(Token *tok) {
+    LVar *lvar = calloc(1, sizeof(LVar));
     lvar->next = locals;
     lvar->name = tok->str;
     lvar->len = tok->len;
@@ -153,6 +146,7 @@ void declare_var(Token *tok) {
     else
         lvar->offset = 8;
     locals = lvar;
+    return lvar->offset;
 }
 
 // 関数名を(までヒープ領域にコピーしてそれを指す
@@ -188,7 +182,7 @@ Func *glbstmt() {
                 error_at(token->str, "引数が7つ以上に対応していません");
             
             tok = consume_kind(TK_IDENT);
-            if (tok) declare_var(tok);
+            if (tok && !find_lvar(tok)) declare_var(tok);
             else if (consume(",")) {}
             else if (consume(")")) break;
             else error_at(token->str, "変数宣言か','か')'である必要があります");
@@ -312,6 +306,10 @@ Node *unary() {
 		return unary();
 	if (consume("-"))
 		return new_binary(ND_SUB, new_num(0), unary());
+    if (consume("*"))
+        return new_binary(ND_DEREF, primary(), NULL);
+    if (consume("&"))
+        return new_binary(ND_ADDR, primary(), NULL);
 	return primary();
 }
 
@@ -345,20 +343,10 @@ Node *primary() {
         } else { // 変数の場合
             node->kind = ND_LVAR;
             LVar *lvar = find_lvar(tok);
-            if (lvar) { // 既存の変数
+            if (lvar) // 既存の変数
                 node->offset = lvar->offset;
-            } else { // 新しい変数
-                lvar = calloc(1, sizeof(LVar));
-                lvar->next = locals;
-                lvar->name = tok->str;
-                lvar->len = tok->len;
-                if (locals)
-                    lvar->offset = locals->offset + 8;
-                else 
-                    lvar->offset = 8;
-                node->offset = lvar->offset;
-                locals = lvar;
-            }
+            else // 新しい変数
+                node->offset = declare_var(tok);
         }
         return node;
     }
