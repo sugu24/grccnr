@@ -38,10 +38,13 @@ Node *create_block_node() {
     Node *head_node = new_node(ND_BLOCK);
     Node *cur_node = head_node;
     Node *next_node;
+    Node *next_cand_stmt;
     cur_node->next_stmt = NULL;
     while (!consume("}")) {
+        next_cand_stmt = stmt();
+        if (!next_cand_stmt) continue; // 変数宣言
         next_node = calloc(1, sizeof(Node));
-        next_node->stmt = stmt();
+        next_node->stmt = next_cand_stmt;
         cur_node->next_stmt = next_node;
         cur_node = cur_node->next_stmt;
         cur_node->next_stmt = NULL;
@@ -136,17 +139,17 @@ Node *create_return_node() {
 }
 
 // 変数の宣言 失敗なら途中でexitされる
-int declare_var(Token *tok) {
+void declare_var(Token *tok, VarKind kind) {
     LVar *lvar = calloc(1, sizeof(LVar));
     lvar->next = locals;
     lvar->name = tok->str;
     lvar->len = tok->len;
+    lvar->kind = kind;
     if (locals)
         lvar->offset = locals->offset + 8;
     else
         lvar->offset = 8;
     locals = lvar;
-    return lvar->offset;
 }
 
 // 関数名を(までヒープ領域にコピーしてそれを指す
@@ -169,9 +172,12 @@ void program() {
 
 Func *glbstmt() {
     Func *func;
-    Token *tok = consume_kind(TK_IDENT);
-    if (tok) { // 関数の場合
+    Token *tok;
+    if (consume_kind(TK_INT)) { // 関数の場合
         func = calloc(1, sizeof(func));
+        tok = consume_kind(TK_IDENT);
+        if (!tok)
+            error_at(token->str, "関数名である必要があります");
         // 関数名
         func->func_name = str_copy(tok);
         // ローカル変数の初期化
@@ -181,17 +187,20 @@ Func *glbstmt() {
             if (i == 6)
                 error_at(token->str, "引数が7つ以上に対応していません");
             
-            tok = consume_kind(TK_IDENT);
-            if (tok && !find_lvar(tok)) declare_var(tok);
-            else if (consume(",")) {}
+            if (consume_kind(TK_INT)){
+                tok = consume_kind(TK_IDENT);
+                if (tok && !find_lvar(tok)) 
+                    declare_var(tok, INT_VAR);
+            }    
+            if (consume(",")) {}
             else if (consume(")")) break;
-            else error_at(token->str, "変数宣言か','か')'である必要があります");
+            else error_at(token->str, "','か')'である必要があります");
         }
         func->arg = locals;
         func->stmt = stmt();
         func->locals = locals;
     } else 
-        error_at(token->str, "関数名ではありません"); 
+        error_at(token->str, "関数の型がありません"); 
     
     return func;
 }
@@ -231,6 +240,17 @@ Node *stmt() {
 
 // expr = assign
 Node *expr() {
+    if (consume_kind(TK_INT)){
+        Token *tok = tok = consume_kind(TK_IDENT);
+        if (!tok)
+            error_at(token->str, "宣言する変数名である必要があります");
+        LVar *lvar = find_lvar(tok);
+        if (lvar)
+            error_at(tok->str, "既に宣言されている変数名です");
+        declare_var(tok, INT_VAR);
+        token = tok; // int a = 1;のように宣言後に代入を考慮
+    }
+        
 	return assign();
 }
 
@@ -345,8 +365,8 @@ Node *primary() {
             LVar *lvar = find_lvar(tok);
             if (lvar) // 既存の変数
                 node->offset = lvar->offset;
-            else // 新しい変数
-                node->offset = declare_var(tok);
+            else // 未定義の変数
+                error_at(tok->str, "宣言されていない変数です");
         }
         return node;
     }

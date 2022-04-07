@@ -125,6 +125,8 @@ Token *tokenize() {
                 cur = new_token(TK_WHILE, cur, p, 5);
             else if (len == 3 && strncmp(p, "for", len) == 0)
                 cur = new_token(TK_FOR, cur, p, 3);
+            else if (len == 3 && strncmp(p, "int", len) == 0)
+                cur = new_token(TK_INT, cur, p, 3);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;
