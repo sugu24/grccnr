@@ -4,7 +4,7 @@ assert(){
 	input="$2"
 
 	./grccnr "$input" > temp.s
-	cc -o temp temp.s
+	cc -o temp temp.s link.o
 	./temp
 	actual="$?"
 
@@ -15,6 +15,9 @@ assert(){
 		exit 1
 	fi
 }
+
+assert 4 'int main() { int *p; alloc4(&p, 1, 2, 4, 8); int *q; q = p+2; return *q; }'
+assert 8 'int main() { int *p; alloc4(&p, 1, 2, 4, 8); int *q; q = p+3; return *q; }'
 
 assert 4 'int bar(int *x) { *x = 4; } int main() { int *a; int b = 1; a = &b; bar(a); return *a; }'
 assert 10 'int bar(int **x) { int y = 10; *x = &y; } int main() { int *a; int b; b = 1; a = &b; bar(&a); return *a; }'

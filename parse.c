@@ -340,9 +340,9 @@ Node *mul() {
 Node *unary() {
 	if (consume("+"))
 		return unary();
-	if (consume("-"))
+	else if (consume("-"))
 		return new_binary(ND_SUB, new_num(0), unary());
-    if (consume("*")) { // *を数え、変数の型に違反いていないか確認
+    else if (consume("*")) { // *を数え、変数の型に違反いていないか確認
         int ptrs = 1;
         Node* node;
         Token *tok;
@@ -356,10 +356,10 @@ Node *unary() {
         node->ptrs = ptrs;
         node->offset = lvar->offset;
         return new_binary(ND_DEREF, node, NULL);
-    } 
-    if (consume("&"))
+    } else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
-	return primary();
+	
+    return primary();
 }
 
 Node *primary() {
@@ -394,7 +394,8 @@ Node *primary() {
             LVar *lvar = find_lvar(tok);
             if (lvar) {// 既存の変数
                 node->offset = lvar->offset;
-            }else // 未定義の変数
+                node->lvar = lvar;
+            } else // 未定義の変数
                 error_at(tok->str, "宣言されていない変数です");
         }
         return node;

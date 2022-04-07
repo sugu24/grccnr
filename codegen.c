@@ -182,6 +182,14 @@ void gen_stmt(Node *node) {
             return;
     }
 
+    // ポインタの加算か減算の場合(int*)p + 1 => p + 8となる
+    if (node->lhs->lvar && node->lhs->lvar->type->ptrs - node->lhs->ptrs > 2 &&
+        (!node->rhs->lvar || node->rhs->lvar->type->ptrs == 0))
+        node->rhs = new_binary(ND_MUL, node->rhs, new_num(8));
+    else if (node->lhs->lvar && node->lhs->lvar->type->ptrs - node->lhs->ptrs == 1 &&
+        (!node->rhs->lvar || node->rhs->lvar->type->ptrs == 0))
+        node->rhs = new_binary(ND_MUL, node->rhs, new_num(4));
+
 	gen_stmt(node->lhs);
 	gen_stmt(node->rhs);
 
