@@ -138,18 +138,41 @@ Node *create_return_node() {
     return node;
 }
 
+// 変数の型を返す
+VarType *new_var_type(Token *tok) {
+    VarType *var_type = calloc(1, sizeof(VarType));
+    int ptrs = 0;
+    if (tok->len == 3 && strncmp(tok->str, "int", tok->len) == 0)
+        var_type->ty = INT;
+    else
+        error_at(tok->str, "未定義の型です");
+    
+    while (consume("*")) ptrs++;
+    var_type->ptrs = ptrs;
+    return var_type;
+}
+
 // 変数の宣言 失敗なら途中でexitされる
-void declare_var(Token *tok, VarKind kind) {
+Token *declare_var(Token *tok_var_type) {
+    Token *tok_var_name;
     LVar *lvar = calloc(1, sizeof(LVar));
     lvar->next = locals;
-    lvar->name = tok->str;
-    lvar->len = tok->len;
-    lvar->kind = kind;
+    lvar->type = new_var_type(tok_var_type);
+    tok_var_name = consume_kind(TK_IDENT);
+    
+    if (!tok_var_name) 
+        error_at(token->str, "宣言する変数名がありません");
+    if (find_lvar(tok_var_name)) 
+        error_at(tok_var_name->str, "既に宣言された変数名です");
+    
+    lvar->name = tok_var_name->str;
+    lvar->len = tok_var_name->len;
     if (locals)
         lvar->offset = locals->offset + 8;
     else
         lvar->offset = 8;
     locals = lvar;
+    return tok_var_name;
 }
 
 // 関数名を(までヒープ領域にコピーしてそれを指す
@@ -172,27 +195,27 @@ void program() {
 
 Func *glbstmt() {
     Func *func;
-    Token *tok;
-    if (consume_kind(TK_INT)) { // 関数の場合
+    Token *tok_var_type = consume_kind(TK_VAR_TYPE);
+    Token *tok_var_name;
+    if (tok_var_type) { // 関数の場合
         func = calloc(1, sizeof(func));
-        tok = consume_kind(TK_IDENT);
-        if (!tok)
-            error_at(token->str, "関数名である必要があります");
+        func->type = new_var_type(tok_var_type);
         // 関数名
-        func->func_name = str_copy(tok);
+        tok_var_name = consume_kind(TK_IDENT);
+        if (!tok_var_name)
+            error_at(token->str, "関数名である必要があります");
+        func->func_name = str_copy(tok_var_name);
         // ローカル変数の初期化
         locals = NULL;
         expect("(");
+        // 引数
         for (int i = 0; ; i++) {
             if (i == 6)
                 error_at(token->str, "引数が7つ以上に対応していません");
             
-            if (consume_kind(TK_INT)){
-                tok = consume_kind(TK_IDENT);
-                if (tok && !find_lvar(tok)) 
-                    declare_var(tok, INT_VAR);
-            }    
-            if (consume(",")) {}
+            tok_var_type = consume_kind(TK_VAR_TYPE);
+            if (tok_var_type) declare_var(tok_var_type); 
+            if (consume(",")) continue;
             else if (consume(")")) break;
             else error_at(token->str, "','か')'である必要があります");
         }
@@ -240,17 +263,10 @@ Node *stmt() {
 
 // expr = assign
 Node *expr() {
-    if (consume_kind(TK_INT)){
-        Token *tok = tok = consume_kind(TK_IDENT);
-        if (!tok)
-            error_at(token->str, "宣言する変数名である必要があります");
-        LVar *lvar = find_lvar(tok);
-        if (lvar)
-            error_at(tok->str, "既に宣言されている変数名です");
-        declare_var(tok, INT_VAR);
-        token = tok; // int a = 1;のように宣言後に代入を考慮
-    }
-        
+    Token *tok_var_type = consume_kind(TK_VAR_TYPE);
+    if (tok_var_type) // 変数宣言
+        token = declare_var(tok_var_type); // int a = 1;のように宣言後に代入を考慮
+    
 	return assign();
 }
 
@@ -326,10 +342,23 @@ Node *unary() {
 		return unary();
 	if (consume("-"))
 		return new_binary(ND_SUB, new_num(0), unary());
-    if (consume("*"))
-        return new_binary(ND_DEREF, primary(), NULL);
+    if (consume("*")) { // *を数え、変数の型に違反いていないか確認
+        int ptrs = 1;
+        Node* node;
+        Token *tok;
+        while (consume("*")) ptrs++;
+        token = tok = consume_kind(TK_IDENT);
+        LVar *lvar = find_lvar(tok);
+        if (ptrs > lvar->type->ptrs) // *の数が変数の型に違反していないか
+            error_at(tok->str, "変数の型と異なります");
+        
+        node = unary();
+        node->ptrs = ptrs;
+        node->offset = lvar->offset;
+        return new_binary(ND_DEREF, node, NULL);
+    } 
     if (consume("&"))
-        return new_binary(ND_ADDR, primary(), NULL);
+        return new_binary(ND_ADDR, unary(), NULL);
 	return primary();
 }
 
@@ -363,9 +392,9 @@ Node *primary() {
         } else { // 変数の場合
             node->kind = ND_LVAR;
             LVar *lvar = find_lvar(tok);
-            if (lvar) // 既存の変数
+            if (lvar) {// 既存の変数
                 node->offset = lvar->offset;
-            else // 未定義の変数
+            }else // 未定義の変数
                 error_at(tok->str, "宣言されていない変数です");
         }
         return node;

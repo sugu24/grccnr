@@ -15,8 +15,14 @@ assert(){
 		exit 1
 	fi
 }
-assert 3 'int main() { int x = 3; int y = &x; return *y; }'
-assert 3 'int main() { int x = 3; int y = 5; int z = &y + 8; return *z; }'
+
+assert 4 'int bar(int *x) { *x = 4; } int main() { int *a; int b = 1; a = &b; bar(a); return *a; }'
+assert 10 'int bar(int **x) { int y = 10; *x = &y; } int main() { int *a; int b; b = 1; a = &b; bar(&a); return *a; }'
+assert 4 'int main() { int *a; int b = 4; a = &b; *a = *a - 1; *a = *a - 1; return 2*b;}'
+
+assert 3 'int main() { int x; int *y; y = &x; *y = 3; return x;}'
+assert 3 'int main() { int x; x = 3; int *y; y = &x; return *y; }'
+assert 3 'int main() { int x = 3; int y = 5; int *z = &y + 8; return *z; }'
 
 assert 20 'int main() { int bar = 2; if (bar == 2) bar = bar * 10; return bar; }'
 assert 1 'int main() { int bar = 0; if (bar == 0) bar = 1; else if (bar > 0) bar = bar * 10; return bar; }'
@@ -47,7 +53,8 @@ assert 21 'int bar2(int a,int b) { return a + b; } int bar3(int a,int b,int c) {
 #assert 42 '42;'
 #assert 41 ' 12 + 34 - 5; '
 #assert 15 '5*(9-6);'
-assert 4 'int main() { return (3 + - -5) / 2; }'
+assert 4 'int main() { return (3 + --5) / 2; }'
+assert 4 'int main() { return (14 + -5) / 2; }'
 #assert 38 '-(10--9)*-2;'
 #assert 10 '- -10;'
 #assert 10 '- - +10;'

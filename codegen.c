@@ -161,12 +161,18 @@ void gen_stmt(Node *node) {
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
-            printf("  pop rax\n");
-            printf("  mov rax, [rax]\n");
-            printf("  push rax\n");
+            for (int i = 0; i <= node->ptrs; i++) {
+                printf("  pop rax\n");
+                printf("  mov rax, [rax]\n");
+                printf("  push rax\n");
+            }
             return;
         case ND_ASSIGN:
-            gen_lval(node->lhs);
+            if (node->lhs->kind == ND_DEREF) {
+                node->lhs->ptrs--;
+                gen_stmt(node->lhs);
+            } else
+                gen_lval(node->lhs);
             gen_stmt(node->rhs);
 
             printf("  pop rdi\n");
