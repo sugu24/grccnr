@@ -6,8 +6,9 @@ char *arg_register[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 int locals_var_size(LVar *loc) {
     size_t bytes = 0;
     for (; loc ;) {
+        if (loc->type->ptrs > 0) bytes += 8;
+        else if (loc->type->ty == INT) bytes += 8;
         loc = loc->next;
-        bytes += 8;
     }
     return bytes;
 }
@@ -181,14 +182,6 @@ void gen_stmt(Node *node) {
             printf("  push rdi\n");
             return;
     }
-
-    // ポインタの加算か減算の場合(int*)p + 1 => p + 8となる
-    if (node->lhs->lvar && node->lhs->lvar->type->ptrs - node->lhs->ptrs > 2 &&
-        (!node->rhs->lvar || node->rhs->lvar->type->ptrs == 0))
-        node->rhs = new_binary(ND_MUL, node->rhs, new_num(8));
-    else if (node->lhs->lvar && node->lhs->lvar->type->ptrs - node->lhs->ptrs == 1 &&
-        (!node->rhs->lvar || node->rhs->lvar->type->ptrs == 0))
-        node->rhs = new_binary(ND_MUL, node->rhs, new_num(4));
 
 	gen_stmt(node->lhs);
 	gen_stmt(node->rhs);

@@ -20,6 +20,7 @@ void error_at(char *loc, char *fmt, ...) {
 	va_start(ap, fmt);
 
 	int pos = loc - user_input;
+    //if (pos > 1000) error_at(user_input, "エラー箇所がおかしい");
 	fprintf(stderr, "%s\n", user_input);
 	fprintf(stderr, "%*s", pos, " ");
 	fprintf(stderr, "^ ");

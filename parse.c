@@ -2,6 +2,7 @@
 
 Func *code[1024];
 LVar *locals;
+Func *now_func;
 
 int control = 0;
 
@@ -167,10 +168,21 @@ Token *declare_var(Token *tok_var_type) {
     
     lvar->name = tok_var_name->str;
     lvar->len = tok_var_name->len;
-    if (locals)
-        lvar->offset = locals->offset + 8;
+    int offset = 8;
+    
+    /*
+    if (lvar->type->ptrs > 0)
+        offset = 8;
+    else if (lvar->type->ty == INT)
+        offset = 4;
     else
-        lvar->offset = 8;
+        error_at(token->str, "型を処理できません");
+    */
+
+    if (locals)
+        lvar->offset = locals->offset + offset;
+    else
+        lvar->offset = offset;
     locals = lvar;
     return tok_var_name;
 }
@@ -198,7 +210,8 @@ Func *glbstmt() {
     Token *tok_var_type = consume_kind(TK_VAR_TYPE);
     Token *tok_var_name;
     if (tok_var_type) { // 関数の場合
-        func = calloc(1, sizeof(func));
+        func = calloc(1, sizeof(Func));
+        now_func = func;
         func->type = new_var_type(tok_var_type);
         // 関数名
         tok_var_name = consume_kind(TK_IDENT);
@@ -224,7 +237,6 @@ Func *glbstmt() {
         func->locals = locals;
     } else 
         error_at(token->str, "関数の型がありません"); 
-    
     return func;
 }
 
@@ -237,7 +249,6 @@ stmt = expr ";"
 */
 Node *stmt() {
     Node *node;
-    
     if (consume("{")) { // block文
         node = create_block_node();
         return node;
@@ -273,8 +284,10 @@ Node *expr() {
 // assign = equality ("=" assign)?
 Node *assign() {
     Node *node = equality();
-    if (consume("="))
+    if (consume("=")) {
         node = new_binary(ND_ASSIGN, node, assign());
+        AST_type(node);
+    }
     return node;
 }
 
@@ -342,23 +355,18 @@ Node *unary() {
 		return unary();
 	else if (consume("-"))
 		return new_binary(ND_SUB, new_num(0), unary());
-    else if (consume("*")) { // *を数え、変数の型に違反いていないか確認
-        int ptrs = 1;
-        Node* node;
-        Token *tok;
-        while (consume("*")) ptrs++;
-        token = tok = consume_kind(TK_IDENT);
-        LVar *lvar = find_lvar(tok);
-        if (ptrs > lvar->type->ptrs) // *の数が変数の型に違反していないか
-            error_at(tok->str, "変数の型と異なります");
-        
-        node = unary();
-        node->ptrs = ptrs;
-        node->offset = lvar->offset;
-        return new_binary(ND_DEREF, node, NULL);
-    } else if (consume("&"))
+    else if (consume("*"))      
+        return new_binary(ND_DEREF, unary(), NULL);
+    else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
-	
+	else if (consume_kind(TK_SIZEOF)) {
+        Node *node = unary();
+        VarType *expr_type = AST_type(node);
+        if (expr_type->ptrs == 0)
+            return new_num(4);
+        else
+            return new_num(8);
+    }
     return primary();
 }
 
@@ -383,7 +391,7 @@ Node *primary() {
                     if (i == 6)
                         error_at(token->str, "引数の個数は7個以上に対応していません");
                     node->arg[i] = expr();
-
+                    
                     if (consume(",")) {} // 次の引数がある
                     else if (consume(")")) break; // 引数終了
                     else error_at(token->str, "引数が正しくありません");
