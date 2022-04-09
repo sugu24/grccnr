@@ -4,13 +4,10 @@ char *arg_register[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
 // 関数内のローカル変数のサイズを計算
 int locals_var_size(LVar *loc) {
-    size_t bytes = 0;
-    for (; loc ;) {
-        if (loc->type->ptrs > 0) bytes += PTR_SIZE;
-        else if (loc->type->ty == INT) bytes += INT_SIZE;
-        loc = loc->next;
-    }
-    return bytes;
+    if (loc)
+        return loc->offset;
+    else
+        return 0;
 }
 
 // 変数が示すアドレスをスタックにpushする
@@ -162,17 +159,19 @@ void gen_stmt(Node *node) {
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
-            for (int i = 0; i <= node->ptrs; i++) {
-                printf("  pop rax\n");
-                printf("  mov rax, [rax]\n");
-                printf("  push rax\n");
-            }
+            printf("  pop rax\n");
+            printf("  mov rax, [rax]\n");
+            printf("  push rax\n");
+            return;
+        case ND_ARRAY:
+            printf("  mov rax, rbp\n");
+            printf("  sub rax, %d\n", node->lvar->offset);
+            printf("  push rax\n");
             return;
         case ND_ASSIGN:
-            if (node->lhs->kind == ND_DEREF) {
-                node->lhs->ptrs--;
-                gen_stmt(node->lhs);
-            } else
+            if (node->lhs->kind == ND_DEREF)
+                gen_stmt(node->lhs->lhs);
+            else
                 gen_lval(node->lhs);
             gen_stmt(node->rhs);
 

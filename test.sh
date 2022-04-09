@@ -16,6 +16,15 @@ assert(){
 	fi
 }
 
+assert 1 'int main() { int a[3]; int two = 2; a[two] = 1; int y = a[two]; return y; }'
+assert 4 'int main() { int a = 1; int b = 2; int c = 3; int *d = &c; int **e = &d; *(*e+1) = 4; return b;}'
+assert 3 'int main() { int a[2]; *a = 1; *(a+1) = 2; int *p; p = a; return *p+*(p+1); }'
+assert 2 'int main() { int a[2]; *(a+1) = 2; return *(a+1); }'
+assert 2 'int main() { int *a; int y = 2; a = &y; return *a; }'
+assert 3 'int main() { int x; int *y; y = &x; *y = 3; return x;}'
+assert 1 'int main() { int a[10]; a[0] = 1; return a[0]; }'
+
+
 assert 4 'int main() { int x; int *y; return sizeof(x); }'
 assert 8 'int main() { int x; int *y; return sizeof(y); }'
 assert 4 'int main() { int x; int *y; return sizeof(x+3); }'
@@ -24,7 +33,6 @@ assert 4 'int main() { int x; int *y; return sizeof(*y); }'
 assert 4 'int main() { int x; int *y; return sizeof(1); }'
 assert 4 'int main() { int x; int *y; return sizeof(sizeof(1)); }'
 
-assert 1 'int main() { int a = 1; int b = 2; int c = 3; int *d = &c; int **e = &d; a = *(1+*e+1); return a;}'
 assert 11 'int foo() { return 11; } int bar(int a,int b) { return a * 10 + b; } int main() { int c = bar(1,1); return c; }'
 assert 11 'int bar(int a,int b) { return a * 10 + b; } int main() { int c = bar(1,1); return c; }'
 assert 4 'int main() { int *a; int b = 4; a = &b; *a = *a - 1; *a = *a - 1; return 2*b;}'
@@ -35,7 +43,6 @@ assert 2 'int main() { int a = 1; int b = 1; return b + 1; }'
 assert 4 'int bar(int *x) { *x = 4; } int main() { int *a; int b = 1; a = &b; bar(a); return *a; }'
 assert 10 'int bar(int **x) { int y = 10; *x = &y; } int main() { int *a; int b; b = 1; a = &b; bar(&a); return *a; }'
 
-assert 3 'int main() { int x; int *y; y = &x; *y = 3; return x;}'
 assert 3 'int main() { int x; x = 3; int *y; y = &x; return *y; }'
 assert 3 'int main() { int x = 3; int y = 5; int *z = &y + 8; return *z; }'
 

@@ -98,6 +98,11 @@ VarType *AST_type(Node *node) {
             var_type->ty = node->lvar->type->ty;
             var_type->ptrs = node->lvar->type->ptrs;
             return var_type;
+        case ND_ARRAY:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = node->lvar->type->ty;
+            var_type->ptrs = node->lvar->type->ptrs;
+            return var_type;
         case ND_RETURN:
             return AST_type(node->lhs);
         case ND_IF:

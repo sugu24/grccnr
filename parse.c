@@ -168,20 +168,32 @@ Token *declare_var(Token *tok_var_type) {
     
     lvar->name = tok_var_name->str;
     lvar->len = tok_var_name->len;
-    int offset;
+    int offset = 1;
     
+    // []?
+    if (consume("[")) {
+        lvar->type->array = 1;
+        lvar->type->ptrs++;
+        lvar->type->array_size = expect_number();
+        expect("]");
+    }
+
+    // メモリサイズ
+    if (lvar->type->array)
+        offset = lvar->type->array_size;
     if (lvar->type->ptrs > 0)
-        offset = PTR_SIZE;
+        offset *= PTR_SIZE;
     else if (lvar->type->ty == INT)
-        offset = INT_SIZE;
+        offset *= INT_SIZE;
     else
         error_at(token->str, "型を処理できません");
     
-
+    // RBPからのオフセット
     if (locals)
         lvar->offset = locals->offset + offset;
     else
         lvar->offset = offset;
+        
     locals = lvar;
     return tok_var_name;
 }
@@ -274,10 +286,11 @@ Node *stmt() {
 // expr = assign
 Node *expr() {
     Node *node;
-    Token *tok_var_type = consume_kind(TK_VAR_TYPE);
-    if (tok_var_type) // 変数宣言
-        token = declare_var(tok_var_type); // int a = 1;のように宣言後に代入を考慮
-    
+    Token *tok = consume_kind(TK_VAR_TYPE);
+    if (tok) {// 変数宣言
+        token = declare_var(tok); // int a = 1;のように宣言後に代入を考慮
+    }
+
     node = assign();
     AST_type(node);
 	return node;
@@ -356,7 +369,7 @@ Node *unary() {
 		return unary();
 	else if (consume("-"))
 		return new_binary(ND_SUB, new_num(0), unary());
-    else if (consume("*"))      
+    else if (consume("*"))
         return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
@@ -404,6 +417,16 @@ Node *primary() {
             if (lvar) {// 既存の変数
                 node->offset = lvar->offset;
                 node->lvar = lvar;
+
+                // 配列の場合
+                if (node->lvar->type->array) {
+                    node->kind = ND_ARRAY;
+                    // 添え字の場合
+                    if (node->lvar->type->array && consume("[")) { 
+                        node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
+                        expect("]");
+                    }
+                }
             } else // 未定義の変数
                 error_at(tok->str, "宣言されていない変数です");
         }
