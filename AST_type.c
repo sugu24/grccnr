@@ -4,7 +4,7 @@ int arg_check(Func *func, Node *node) {
     int argc1 = 0, argc2 = 0;
     LVar *arg = func->arg;
     for (; node->arg[argc1]; argc1++) {}
-    for (; arg; argc2++) { arg = arg->next; }
+    for (; arg; arg = arg->next) argc2++;
     
     if (argc1 == argc2) return 1;
     else return 0;
@@ -119,6 +119,10 @@ VarType *AST_type(Node *node) {
         
     }
 
+    //printf("kind=%d lhs_kind=%d rhs_kind=%d lhs_ty=%d rhs_ty=%d lhs_ptr=%d rhs_ptr=%d\n", 
+    //        node->kind, node->lhs->kind, node->rhs->kind, lhs_var_type->ty, rhs_var_type->ty,
+    //        lhs_var_type->ptrs, rhs_var_type->ptrs);
+    
     // 演算の場合
     // lhsとrhsの型を一致させる
     if (lhs_var_type->ty != rhs_var_type->ty)
@@ -126,11 +130,11 @@ VarType *AST_type(Node *node) {
 
     // ptrsが1,0のとき
     if (lhs_var_type->ptrs == 1 && rhs_var_type->ptrs == 0) {
-        node->rhs = new_binary(ND_MUL, node->rhs, new_num(4));
+        node->rhs = new_binary(ND_MUL, node->rhs, new_num(8));
         return lhs_var_type;
     }
     if (lhs_var_type->ptrs == 0 && rhs_var_type->ptrs == 1) {
-        node->lhs = new_binary(ND_MUL, node->lhs, new_num(4));
+        node->lhs = new_binary(ND_MUL, node->lhs, new_num(8));
         return rhs_var_type;
     }
     

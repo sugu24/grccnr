@@ -6,8 +6,8 @@ char *arg_register[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 int locals_var_size(LVar *loc) {
     size_t bytes = 0;
     for (; loc ;) {
-        if (loc->type->ptrs > 0) bytes += 8;
-        else if (loc->type->ty == INT) bytes += 8;
+        if (loc->type->ptrs > 0) bytes += PTR_SIZE;
+        else if (loc->type->ty == INT) bytes += INT_SIZE;
         loc = loc->next;
     }
     return bytes;

@@ -24,14 +24,13 @@ assert 4 'int main() { int x; int *y; return sizeof(*y); }'
 assert 4 'int main() { int x; int *y; return sizeof(1); }'
 assert 4 'int main() { int x; int *y; return sizeof(sizeof(1)); }'
 
+assert 1 'int main() { int a = 1; int b = 2; int c = 3; int *d = &c; int **e = &d; a = *(1+*e+1); return a;}'
 assert 11 'int foo() { return 11; } int bar(int a,int b) { return a * 10 + b; } int main() { int c = bar(1,1); return c; }'
 assert 11 'int bar(int a,int b) { return a * 10 + b; } int main() { int c = bar(1,1); return c; }'
 assert 4 'int main() { int *a; int b = 4; a = &b; *a = *a - 1; *a = *a - 1; return 2*b;}'
 assert 3 'int main() { int a = 1 + 1; a = a + 1; return a; }'
 assert 2 'int main() { int a = 1; int b = 1; return b + 1; }'
 
-assert 4 'int main() { int *p; alloc4(&p, 1, 2, 4, 8); int *q; q = 1+1+p; return *q; }'
-assert 8 'int main() { int *p; alloc4(&p, 1, 2, 4, 8); int *q; q = 1+1+p+1; return *q; }'
 
 assert 4 'int bar(int *x) { *x = 4; } int main() { int *a; int b = 1; a = &b; bar(a); return *a; }'
 assert 10 'int bar(int **x) { int y = 10; *x = &y; } int main() { int *a; int b; b = 1; a = &b; bar(&a); return *a; }'

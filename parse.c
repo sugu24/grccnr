@@ -168,16 +168,15 @@ Token *declare_var(Token *tok_var_type) {
     
     lvar->name = tok_var_name->str;
     lvar->len = tok_var_name->len;
-    int offset = 8;
+    int offset;
     
-    /*
     if (lvar->type->ptrs > 0)
-        offset = 8;
+        offset = PTR_SIZE;
     else if (lvar->type->ty == INT)
-        offset = 4;
+        offset = INT_SIZE;
     else
         error_at(token->str, "型を処理できません");
-    */
+    
 
     if (locals)
         lvar->offset = locals->offset + offset;
@@ -274,20 +273,22 @@ Node *stmt() {
 
 // expr = assign
 Node *expr() {
+    Node *node;
     Token *tok_var_type = consume_kind(TK_VAR_TYPE);
     if (tok_var_type) // 変数宣言
         token = declare_var(tok_var_type); // int a = 1;のように宣言後に代入を考慮
     
-	return assign();
+    node = assign();
+    AST_type(node);
+	return node;
 }
 
 // assign = equality ("=" assign)?
 Node *assign() {
     Node *node = equality();
-    if (consume("=")) {
+    if (consume("=")) 
         node = new_binary(ND_ASSIGN, node, assign());
-        AST_type(node);
-    }
+    
     return node;
 }
 
@@ -329,8 +330,8 @@ Node *add() {
 
 	for (;;) {
 		if (consume("+"))
-			node = new_binary(ND_ADD, node, mul());
-		else if (consume("-"))
+            node = new_binary(ND_ADD, node, mul());
+        else if (consume("-"))
 			node = new_binary(ND_SUB, node, mul());
 		else
 			return node;
@@ -363,9 +364,9 @@ Node *unary() {
         Node *node = unary();
         VarType *expr_type = AST_type(node);
         if (expr_type->ptrs == 0)
-            return new_num(4);
+            return new_num(4); // int
         else
-            return new_num(8);
+            return new_num(PTR_SIZE);
     }
     return primary();
 }
@@ -373,7 +374,7 @@ Node *unary() {
 Node *primary() {
 	// 次のトークンが"("なら、"(" expr ")"
 	if (consume("(")) {
-		Node *node = expr();
+		Node *node = assign();
 		expect(")");
 		return node;
 	}
@@ -390,7 +391,7 @@ Node *primary() {
                 for (i = 0; ; i++) {
                     if (i == 6)
                         error_at(token->str, "引数の個数は7個以上に対応していません");
-                    node->arg[i] = expr();
+                    node->arg[i] = assign();
                     
                     if (consume(",")) {} // 次の引数がある
                     else if (consume(")")) break; // 引数終了
