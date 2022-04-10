@@ -127,6 +127,8 @@ Token *tokenize() {
                 cur = new_token(TK_FOR, cur, p, 3);
             else if (len == 3 && strncmp(p, "int", len) == 0)
                 cur = new_token(TK_VAR_TYPE, cur, p, 3);
+            else if (len == 4 && strncmp(p, "char", len) == 0)
+                cur = new_token(TK_VAR_TYPE, cur, p, 4);
             else if (len == 6 && strncmp(p, "sizeof", len) == 0)
                 cur = new_token(TK_SIZEOF, cur, p, 6);
             else

@@ -24,6 +24,16 @@ VarType *func_type(Node *node) {
     error_at(token->str, "一致する関数がありません");
 }
 
+int unassignable(VarType *lhs, VarType *rhs) {
+    // printf("lhs->ty=%d, lhs->ptrs=%d, rhs->ty=%d, rhs->ptrs=%d\n", lhs->ty, lhs->ptrs, rhs->ty, rhs->ptrs);
+    if ((lhs->ty == CHAR && lhs->ptrs == 0 && rhs->ty == INT) ||
+        (lhs->ty == INT && rhs->ty == CHAR && rhs->ptrs == 0) ||
+        (lhs->ty == rhs->ty && lhs->ptrs == rhs->ptrs))
+        return 0;
+    else 
+        return 1;
+}
+
 // 戻り値 Type:(int,ptr) ptrs:ptr?
 VarType *AST_type(Node *node) {
     VarType *lhs_var_type, *rhs_var_type;
@@ -89,14 +99,14 @@ VarType *AST_type(Node *node) {
         case ND_ASSIGN:
             lhs_var_type = AST_type(node->lhs);
             rhs_var_type = AST_type(node->rhs);
-            if (lhs_var_type->ty != rhs_var_type->ty ||
-                lhs_var_type->ptrs < rhs_var_type->ptrs)
-                    error_at(token->str, "右辺と左辺の型が一致しません");
+            if (unassignable(lhs_var_type, rhs_var_type))
+                error_at(token->str, "右辺と左辺の型が一致しません");
             return rhs_var_type;
         case ND_LVAR:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = node->lvar->type->ty;
             var_type->ptrs = node->lvar->type->ptrs;
+            var_type->array = node->lvar->type->array_size;
             return var_type;
         case ND_ARRAY:
             var_type = calloc(1, sizeof(VarType));
@@ -134,26 +144,26 @@ VarType *AST_type(Node *node) {
     //        lhs_var_type->ptrs, rhs_var_type->ptrs);
     
     // 演算の場合
-    // lhsとrhsの型を一致させる
-    if (lhs_var_type->ty != rhs_var_type->ty)
-        error_at(token->str, "lhsとrhsの型が異なります");
-
-    // ptrsが1,0のとき
-    if (lhs_var_type->ptrs == 1 && rhs_var_type->ptrs == 0) {
+    // char型a[index]の場合
+    if (lhs_var_type->ty == CHAR && rhs_var_type->ty == INT) {
+        return lhs_var_type;
+    }
+    // ptrsが1,0のの場合
+    else if (lhs_var_type->ptrs == 1 && rhs_var_type->ptrs == 0) {
         node->rhs = new_binary(ND_MUL, node->rhs, new_num(8));
         return lhs_var_type;
     }
-    if (lhs_var_type->ptrs == 0 && rhs_var_type->ptrs == 1) {
+    else if (lhs_var_type->ptrs == 0 && rhs_var_type->ptrs == 1) {
         node->lhs = new_binary(ND_MUL, node->lhs, new_num(8));
         return rhs_var_type;
     }
     
     // ptrsが2と0の場合
-    if (lhs_var_type->ptrs >= 2 && rhs_var_type->ptrs == 0) {
+    else if (lhs_var_type->ptrs >= 2 && rhs_var_type->ptrs == 0) {
         node->rhs = new_binary(ND_MUL, node->rhs, new_num(8));
         return lhs_var_type;
     }
-    if (lhs_var_type->ptrs == 0 && rhs_var_type->ptrs >= 2) {
+    else if (lhs_var_type->ptrs == 0 && rhs_var_type->ptrs >= 2) {
         node->lhs = new_binary(ND_MUL, node->lhs, new_num(8));
         return rhs_var_type;
     }

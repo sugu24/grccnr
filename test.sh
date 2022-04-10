@@ -16,6 +16,10 @@ assert(){
 	fi
 }
 
+assert 3 'int main() { char x[3]; x[0] = -1; int y = 4; return x[0] + y; }'
+assert 3 'int main() { char x[3]; x[1] = -1; x[0] = x[1]; int y = 4; return x[0] + y; }'
+assert 3 'int main() { char x[3]; *(x+1) = -1; x[0] = x[1]; int y = 4; return x[0] + y; }'
+
 assert 0  'int x; int y[20]; int main() { return x + y[5]; + y[0]; } '
 assert 1 'int main() { int a[3]; int two = 2; a[two] = 1; int y = a[two]; return y; }'
 assert 3 'int main() { int a[2]; *a = 1; *(a+1) = 2; int *p; p = a; return *p+*(p+1); }'

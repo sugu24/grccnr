@@ -151,8 +151,10 @@ Node *create_return_node() {
 VarType *new_var_type(Token *tok) {
     VarType *var_type = calloc(1, sizeof(VarType));
     int ptrs = 0;
-    if (tok->len == 3 && strncmp(tok->str, "int", tok->len) == 0)
+    if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "int", tok->len) == 0)
         var_type->ty = INT;
+    else if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "char", tok->len) == 0)
+        var_type->ty = CHAR;
     else
         error_at(tok->str, "未定義の型です");
     
@@ -189,7 +191,9 @@ Token *declare_var(Token *tok_var_type) {
     // スタック上のサイズ
     if (lvar->type->array)
         offset = lvar->type->array_size;
-    if (lvar->type->ptrs > 0)
+    if (lvar->type->ty == CHAR) 
+        offset *= CHAR_SIZE;
+    else if (lvar->type->ptrs > 0)
         offset *= PTR_SIZE;
     else if (lvar->type->ty == INT)
         offset *= INT_SIZE;
@@ -218,10 +222,9 @@ char *str_copy(Token *tok) {
 // program = stmt*
 void program() {
     int i = 0;
-    Func *func;
     while (!at_eof()) {
-        func = glbstmt();
-        if (func) code[i++] = func;
+        code[i] = glbstmt();
+        if (code[i]) i++;
     }    
     code[i] = NULL;
 }
@@ -291,6 +294,8 @@ Func *glbstmt() {
             offset *= PTR_SIZE;
         else if (lvar->type->ty == INT)
             offset *= INT_SIZE;
+        else if (lvar->type->ty == CHAR)
+            offset *= CHAR_SIZE;
         else
             error_at(token->str, "型を処理できません");
         lvar->offset = offset;

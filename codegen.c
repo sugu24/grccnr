@@ -27,10 +27,19 @@ int gen_arg_push(LVar *arg) {
     printf("  sub rax, %d\n", arg->offset);
     printf("  mov [rax], %s\n", arg_register[argc]);
     return argc + 1;
-} 
+}
+
+// raxにデータを転送する
+void mov_rax_data(Node *node) {
+    if (node->lvar && node->lvar->type->ty == CHAR && 
+        node->lvar->type->ptrs == 0)
+        printf("  movsx rax, BYTE PTR [rax]\n");
+    else
+        printf("  mov rax, [rax]\n");
+            
+}
 
 // グローバル変数
-
 // 代入式の左辺はアドレスをpushする
 void gen_addr(Node *node) {
     switch (node->kind) {
@@ -64,6 +73,7 @@ void gen_addr(Node *node) {
 // ジェネレータ
 void gen_stmt(Node *node) {
     int i;
+    VarType *type;
 	switch (node->kind) {
         case ND_CALL_FUNC:
             for (i = 0; i < 6 && node->arg[i]; i++)
@@ -178,7 +188,7 @@ void gen_stmt(Node *node) {
                 printf("  mov rax, rbp\n");
                 printf("  sub rax, %d\n", node->offset);
             }
-            printf("  mov rax, [rax]\n");
+            mov_rax_data(node);
             printf("  push rax\n");
             return;
         case ND_ADDR:
@@ -187,7 +197,7 @@ void gen_stmt(Node *node) {
         case ND_DEREF:
             gen_stmt(node->lhs);
             printf("  pop rax\n");
-            printf("  mov rax, [rax]\n");
+            mov_rax_data(node->lhs);
             printf("  push rax\n");
             return;
         case ND_ARRAY: // 変数
@@ -203,9 +213,16 @@ void gen_stmt(Node *node) {
             gen_addr(node->lhs);
             gen_stmt(node->rhs);
 
+            type = AST_type(node->lhs);
+
             printf("  pop rdi\n");
             printf("  pop rax\n");
-            printf("  mov [rax], rdi\n");
+            // charなら1バイトのみ書き込まれる
+            if (type->ty == CHAR && type->ptrs == 0)
+                printf("  mov [rax], dil\n");
+            // int ポインタなどは8バイト
+            else 
+                printf("  mov [rax], rdi\n");
             printf("  push rdi\n");
             return;
     }
