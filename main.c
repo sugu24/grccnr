@@ -44,6 +44,9 @@ int main(int argc, char** argv){
 	printf(".intel_syntax noprefix\n");
 	printf(".globl main\n");
 
+    // グローバル変数
+    gen_global_var(global_var);
+
     // 先頭の式から順にコード生成
     for (int i = 0; code[i]; i++) {
 	    // 抽象構文木を下りながらコード生成

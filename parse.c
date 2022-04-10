@@ -2,6 +2,7 @@
 
 Func *code[1024];
 LVar *locals;
+LVar *global_var;
 Func *now_func;
 
 int control = 0;
@@ -27,7 +28,14 @@ Node *new_num(int val) {
 
 // 変数を名前で検索する　見つからないならNULLを返す
 LVar *find_lvar(Token *tok) {
+    // ローカル変数
     for (LVar *var = locals; var; var = var->next) {
+        if (var->len == tok->len && !memcmp(tok->str, var->name, var->len))
+            return var;
+    }
+
+    // グローバル変数
+    for (LVar *var = global_var; var; var = var->next) {
         if (var->len == tok->len && !memcmp(tok->str, var->name, var->len))
             return var;
     }
@@ -178,7 +186,7 @@ Token *declare_var(Token *tok_var_type) {
         expect("]");
     }
 
-    // メモリサイズ
+    // スタック上のサイズ
     if (lvar->type->array)
         offset = lvar->type->array_size;
     if (lvar->type->ptrs > 0)
@@ -210,28 +218,40 @@ char *str_copy(Token *tok) {
 // program = stmt*
 void program() {
     int i = 0;
+    Func *func;
     while (!at_eof()) {
-        code[i++] = glbstmt();
+        func = glbstmt();
+        if (func) code[i++] = func;
     }    
     code[i] = NULL;
 }
 
 Func *glbstmt() {
-    Func *func;
-    Token *tok_var_type = consume_kind(TK_VAR_TYPE);
-    Token *tok_var_name;
-    if (tok_var_type) { // 関数の場合
+    Func *func; // 関数の場合に仕様
+    Token *tok_var_type, *tok_var_name;
+    VarType *type; // 型
+    
+    // 型取得
+    tok_var_type = consume_kind(TK_VAR_TYPE);
+    if (!tok_var_type) error_at(token->str, "型である必要があります");
+    type = new_var_type(tok_var_type);
+
+    // 関数名 or グローバル変数名取得
+    tok_var_name = consume_kind(TK_IDENT);
+    if (!tok_var_name) error_at(token->str, "変数名か関数名である必要があります");
+
+    // "("なら関数 それ以外ならグローバル変数
+    if (consume("(")) {
         func = calloc(1, sizeof(Func));
         now_func = func;
-        func->type = new_var_type(tok_var_type);
-        // 関数名
-        tok_var_name = consume_kind(TK_IDENT);
-        if (!tok_var_name)
-            error_at(token->str, "関数名である必要があります");
+
+        // 型と関数名の代入
+        func->type = type;
         func->func_name = str_copy(tok_var_name);
+
         // ローカル変数の初期化
         locals = NULL;
-        expect("(");
+
         // 引数
         for (int i = 0; ; i++) {
             if (i == 6)
@@ -243,11 +263,45 @@ Func *glbstmt() {
             else if (consume(")")) break;
             else error_at(token->str, "','か')'である必要があります");
         }
-        func->arg = locals;
-        func->stmt = stmt();
-        func->locals = locals;
-    } else 
-        error_at(token->str, "関数の型がありません"); 
+        func->arg = locals; // 引数
+        func->stmt = stmt(); // 処理
+        func->locals = locals; // ローカル変数
+        return func;
+    } 
+    else { // グローバル変数
+        LVar *lvar = calloc(1, sizeof(LVar));
+        lvar->type = type;
+        lvar->name = str_copy(tok_var_name);
+        lvar->len = tok_var_name->len;
+        lvar->type->glb_var = 1;
+
+        // 配列?
+        if (consume("[")) {
+            lvar->type->array = 1;
+            lvar->type->ptrs++;
+            lvar->type->array_size = expect_number();
+            expect("]");
+        }
+
+        // メモリ上のサイズ
+        int offset = 1;
+        if (lvar->type->array)
+            offset = lvar->type->array_size;
+        if (lvar->type->ptrs > 0)
+            offset *= PTR_SIZE;
+        else if (lvar->type->ty == INT)
+            offset *= INT_SIZE;
+        else
+            error_at(token->str, "型を処理できません");
+        lvar->offset = offset;
+
+        // 連結リスト構築
+        lvar->next = global_var;
+        global_var = lvar;
+        expect(";");
+
+        return NULL;
+    } 
     return func;
 }
 
@@ -414,21 +468,23 @@ Node *primary() {
         } else { // 変数の場合
             node->kind = ND_LVAR;
             LVar *lvar = find_lvar(tok);
-            if (lvar) {// 既存の変数
-                node->offset = lvar->offset;
-                node->lvar = lvar;
-
-                // 配列の場合
-                if (node->lvar->type->array) {
-                    node->kind = ND_ARRAY;
-                    // 添え字の場合
-                    if (node->lvar->type->array && consume("[")) { 
-                        node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
-                        expect("]");
-                    }
-                }
-            } else // 未定義の変数
+            if (!lvar)
                 error_at(tok->str, "宣言されていない変数です");
+            
+            // 既存の変数
+            node->lvar = lvar;
+            if (!lvar->type->glb_var)
+                node->offset = lvar->offset;
+
+            // 配列の場合
+            if (node->lvar->type->array) {
+                node->kind = ND_ARRAY;
+                // 添え字の場合
+                if (node->lvar->type->array && consume("[")) { 
+                    node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
+                    expect("]");
+                }
+            }    
         }
         return node;
     }

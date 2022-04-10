@@ -10,15 +10,6 @@ int locals_var_size(LVar *loc) {
         return 0;
 }
 
-// 変数が示すアドレスをスタックにpushする
-void gen_lval(Node *node) {
-    if (node->kind != ND_LVAR)
-        error("代入の左辺値が変数ではありません");
-    printf("  mov rax, rbp\n");
-    printf("  sub rax, %d\n", node->offset);
-    printf("  push rax\n");
-}
-
 // gen_stmt(node->stmt)後にスタックにraxがpushされる
 // gen_stmt(node->stmt)後にmainに戻らない場合に使用
 void gen_pop(Node *node) {
@@ -37,6 +28,38 @@ int gen_arg_push(LVar *arg) {
     printf("  mov [rax], %s\n", arg_register[argc]);
     return argc + 1;
 } 
+
+// グローバル変数
+
+// 代入式の左辺はアドレスをpushする
+void gen_addr(Node *node) {
+    switch (node->kind) {
+        case ND_DEREF:
+            gen_stmt(node->lhs);
+            break;
+        case ND_ARRAY:
+            if (node->lvar->type->glb_var)
+                printf("  lea rax, %s[rip]\n", node->lvar->name);
+            else {
+                printf("  mov rax, rbp\n");
+                printf("  sub rax, %d\n", node->offset);
+            }
+            printf("  push rax\n");
+            break;
+        case ND_LVAR:
+            if (node->lvar->type->glb_var)
+                printf("  lea rax, %s[rip]\n", node->lvar->name);
+            else {
+                printf("  mov rax, rbp\n");
+                printf("  sub rax, %d\n", node->offset);
+            }
+            printf("  push rax\n");
+            break;
+        default:
+            error("左辺の型を処理できません");
+    }
+    
+}
 
 // ジェネレータ
 void gen_stmt(Node *node) {
@@ -148,14 +171,18 @@ void gen_stmt(Node *node) {
         case ND_NUM:
             printf("  push %d\n", node->val);
             return;
-        case ND_LVAR:
-            gen_lval(node);
-            printf("  pop rax\n");
+        case ND_LVAR: // 変数
+            if (node->lvar->type->glb_var) 
+                printf("  lea rax, %s[rip]\n", node->lvar->name);
+            else {
+                printf("  mov rax, rbp\n");
+                printf("  sub rax, %d\n", node->offset);
+            }
             printf("  mov rax, [rax]\n");
             printf("  push rax\n");
             return;
         case ND_ADDR:
-            gen_lval(node->lhs);
+            gen_addr(node->lhs);
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
@@ -163,16 +190,17 @@ void gen_stmt(Node *node) {
             printf("  mov rax, [rax]\n");
             printf("  push rax\n");
             return;
-        case ND_ARRAY:
-            printf("  mov rax, rbp\n");
-            printf("  sub rax, %d\n", node->lvar->offset);
+        case ND_ARRAY: // 変数
+            if (node->lvar->type->glb_var) 
+                printf("  lea rax, %s[rip]\n", node->lvar->name);    
+            else {
+                printf("  mov rax, rbp\n");
+                printf("  sub rax, %d\n", node->lvar->offset);
+            }
             printf("  push rax\n");
             return;
         case ND_ASSIGN:
-            if (node->lhs->kind == ND_DEREF)
-                gen_stmt(node->lhs->lhs);
-            else
-                gen_lval(node->lhs);
+            gen_addr(node->lhs);
             gen_stmt(node->rhs);
 
             printf("  pop rdi\n");
@@ -247,4 +275,13 @@ void gen_func(Func *func) {
     printf("  mov rsp, rbp\n");
     printf("  pop rbp\n");
     printf("  ret\n");
+}
+
+// グローバル変数
+void gen_global_var(LVar *glb_var) {
+    for (; glb_var; glb_var = glb_var->next) {
+        printf("%s:\n", glb_var->name);
+        if (glb_var->type->ty == INT)
+            printf("  .zero %d\n", glb_var->offset);
+    }
 }

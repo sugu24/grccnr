@@ -104,7 +104,12 @@ VarType *AST_type(Node *node) {
             var_type->ptrs = node->lvar->type->ptrs;
             return var_type;
         case ND_RETURN:
-            return AST_type(node->lhs);
+            lhs_var_type = AST_type(node->lhs);
+            if (now_func->type->ty == lhs_var_type->ty &&
+                now_func->type->ty == lhs_var_type->ptrs)
+                return lhs_var_type;
+            else 
+                error_at(token->str, "戻り値の型が異なります");
         case ND_IF:
             error_at(token->str, "if節は評価出来ません");
         case ND_ELSE_IF:

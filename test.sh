@@ -16,13 +16,14 @@ assert(){
 	fi
 }
 
+assert 0  'int x; int y[20]; int main() { return x + y[5]; + y[0]; } '
 assert 1 'int main() { int a[3]; int two = 2; a[two] = 1; int y = a[two]; return y; }'
-assert 4 'int main() { int a = 1; int b = 2; int c = 3; int *d = &c; int **e = &d; *(*e+1) = 4; return b;}'
 assert 3 'int main() { int a[2]; *a = 1; *(a+1) = 2; int *p; p = a; return *p+*(p+1); }'
 assert 2 'int main() { int a[2]; *(a+1) = 2; return *(a+1); }'
 assert 2 'int main() { int *a; int y = 2; a = &y; return *a; }'
 assert 3 'int main() { int x; int *y; y = &x; *y = 3; return x;}'
 assert 1 'int main() { int a[10]; a[0] = 1; return a[0]; }'
+assert 4 'int main() { int a = 1; int b = 2; int c = 3; int *d = &c; int **e = &d; *(*e+1) = 4; return b;}'
 
 
 assert 4 'int main() { int x; int *y; return sizeof(x); }'
