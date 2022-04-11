@@ -1,6 +1,13 @@
 #include "grccnr.h"
 
-char *arg_register[6] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
+char *arg_register[6][4] = {
+    {"rdi","edi","di","dil"}, 
+    {"rsi","esi","si","sil"}, 
+    {"rdx","edx","dx","dl"}, 
+    {"rcx","ecx","cx","cl"}, 
+    {"r8", "r8d","r8w","r8b"}, 
+    {"r9", "r9d","r9w","r9b"}
+};
 
 // 関数内のローカル変数のサイズを計算
 int locals_var_size(LVar *loc) {
@@ -25,15 +32,32 @@ int gen_arg_push(LVar *arg) {
     // rbpのオフセットに引数をmov
     printf("  mov rax, rbp\n");
     printf("  sub rax, %d\n", arg->offset);
-    printf("  mov [rax], %s\n", arg_register[argc]);
+
+    // arg->typeに合わせてレジスタを選択
+    switch (get_size(arg->type)) {
+        case 1:
+            printf("  mov [rax], %s\n", arg_register[argc][3]);
+            break;
+        case 2:
+            printf("  mov [rax], %s\n", arg_register[argc][2]);
+            break;
+        case 4:
+            printf("  mov [rax], %s\n", arg_register[argc][1]);
+            break;
+        case 8:
+            printf("  mov [rax], %s\n", arg_register[argc][0]);
+            break;
+    }
     return argc + 1;
 }
 
 // raxにデータを転送する
 void mov_rax_data(Node *node) {
-    if (node->lvar && node->lvar->type->ty == CHAR && 
-        node->lvar->type->ptrs == 0)
+    int size = AST_type(node)->size;
+    if (size == 1)
         printf("  movsx rax, BYTE PTR [rax]\n");
+    else if (size == 4)
+        printf("  mov eax, [rax]\n");
     else
         printf("  mov rax, [rax]\n");
             
@@ -45,15 +69,6 @@ void gen_addr(Node *node) {
     switch (node->kind) {
         case ND_DEREF:
             gen_stmt(node->lhs);
-            break;
-        case ND_ARRAY:
-            if (node->lvar->type->glb_var)
-                printf("  lea rax, %s[rip]\n", node->lvar->name);
-            else {
-                printf("  mov rax, rbp\n");
-                printf("  sub rax, %d\n", node->offset);
-            }
-            printf("  push rax\n");
             break;
         case ND_LVAR:
             if (node->lvar->type->glb_var)
@@ -76,10 +91,11 @@ void gen_stmt(Node *node) {
     VarType *type;
 	switch (node->kind) {
         case ND_CALL_FUNC:
-            for (i = 0; i < 6 && node->arg[i]; i++)
+            for (i = 0; i < 6 && node->arg[i]; i++) {
                 gen_stmt(node->arg[i]);
-            for (i = i - 1; i >= 0; i--)
-                printf("  pop %s\n", arg_register[i]);
+                printf("  pop %s\n", arg_register[i][0]);    
+            }
+
             // call前にrspが16の倍数である必要がある
             // and rsp, 0xfffff0 で16の倍数にしても
             // スタックに空洞ができると考えるがだいたい上で実装されている
@@ -188,7 +204,10 @@ void gen_stmt(Node *node) {
                 printf("  mov rax, rbp\n");
                 printf("  sub rax, %d\n", node->offset);
             }
-            mov_rax_data(node);
+            
+            // 配列でないならデータをraxへ
+            if (node->lvar->type->array_size == 0)
+                mov_rax_data(node);
             printf("  push rax\n");
             return;
         case ND_ADDR:
@@ -197,30 +216,24 @@ void gen_stmt(Node *node) {
         case ND_DEREF:
             gen_stmt(node->lhs);
             printf("  pop rax\n");
-            mov_rax_data(node->lhs);
-            printf("  push rax\n");
-            return;
-        case ND_ARRAY: // 変数
-            if (node->lvar->type->glb_var) 
-                printf("  lea rax, %s[rip]\n", node->lvar->name);    
-            else {
-                printf("  mov rax, rbp\n");
-                printf("  sub rax, %d\n", node->lvar->offset);
-            }
+            mov_rax_data(node);
             printf("  push rax\n");
             return;
         case ND_ASSIGN:
             gen_addr(node->lhs);
             gen_stmt(node->rhs);
 
-            type = AST_type(node->lhs);
+            type = AST_type(node->rhs);
 
             printf("  pop rdi\n");
             printf("  pop rax\n");
+
             // charなら1バイトのみ書き込まれる
-            if (type->ty == CHAR && type->ptrs == 0)
+            if (type->size == 1)
                 printf("  mov [rax], dil\n");
-            // int ポインタなどは8バイト
+            // int ポインタなどは4,8バイト
+            else if (type->size == 4)
+                printf("  mov [rax], edi\n");
             else 
                 printf("  mov [rax], rdi\n");
             printf("  push rdi\n");
@@ -299,6 +312,6 @@ void gen_global_var(LVar *glb_var) {
     for (; glb_var; glb_var = glb_var->next) {
         printf("%s:\n", glb_var->name);
         if (glb_var->type->ty == INT)
-            printf("  .zero %d\n", glb_var->offset);
+            printf("  .zero %d\n", glb_var->type->size);
     }
 }

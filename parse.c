@@ -42,6 +42,32 @@ LVar *find_lvar(Token *tok) {
     return NULL;
 }
 
+// メモリサイズ設定
+int memory_size(LVar *lvar) {
+    // メモリ上のサイズ
+    int offset = 1;
+    if (lvar->type->array_size)
+        offset = lvar->type->array_size;
+    
+    // ポインタ格納ではない配列または変数
+    if (lvar->type->ptrs == 0 ||
+       (lvar->type->array_size > 0 && lvar->type->ptrs == 1)) {
+        if (lvar->type->ty == INT)
+            offset *= INT_SIZE;
+        else if (lvar->type->ty == CHAR)
+            offset *= CHAR_SIZE;
+        else
+            error_at(token->str, "型を処理できません");
+    }
+    // ポインタを格納する変数
+    else if (lvar->type->ptrs > 0)
+        offset *= PTR_SIZE;
+    
+    lvar->type->size = offset;
+    //printf("#%d %d %d\n", lvar->type->array_size, lvar->type->ty, offset);
+    return offset;
+}
+
 // ND_BLOCKを返す　先頭のstmtはNULL
 Node *create_block_node() {
     Node *head_node = new_node(ND_BLOCK);
@@ -167,8 +193,11 @@ VarType *new_var_type(Token *tok) {
 Token *declare_var(Token *tok_var_type) {
     Token *tok_var_name;
     LVar *lvar = calloc(1, sizeof(LVar));
-    lvar->next = locals;
+
+    // 変数の型
     lvar->type = new_var_type(tok_var_type);
+
+    // 変数名
     tok_var_name = consume_kind(TK_IDENT);
     
     if (!tok_var_name) 
@@ -178,34 +207,22 @@ Token *declare_var(Token *tok_var_type) {
     
     lvar->name = tok_var_name->str;
     lvar->len = tok_var_name->len;
-    int offset = 1;
     
     // []?
     if (consume("[")) {
-        lvar->type->array = 1;
         lvar->type->ptrs++;
         lvar->type->array_size = expect_number();
         expect("]");
     }
 
-    // スタック上のサイズ
-    if (lvar->type->array)
-        offset = lvar->type->array_size;
-    if (lvar->type->ty == CHAR) 
-        offset *= CHAR_SIZE;
-    else if (lvar->type->ptrs > 0)
-        offset *= PTR_SIZE;
-    else if (lvar->type->ty == INT)
-        offset *= INT_SIZE;
-    else
-        error_at(token->str, "型を処理できません");
-    
+    int offset = memory_size(lvar);
     // RBPからのオフセット
     if (locals)
         lvar->offset = locals->offset + offset;
     else
         lvar->offset = offset;
-        
+
+    lvar->next = locals;
     locals = lvar;
     return tok_var_name;
 }
@@ -238,6 +255,7 @@ Func *glbstmt() {
     tok_var_type = consume_kind(TK_VAR_TYPE);
     if (!tok_var_type) error_at(token->str, "型である必要があります");
     type = new_var_type(tok_var_type);
+    type->size = get_size(type);
 
     // 関数名 or グローバル変数名取得
     tok_var_name = consume_kind(TK_IDENT);
@@ -280,25 +298,13 @@ Func *glbstmt() {
 
         // 配列?
         if (consume("[")) {
-            lvar->type->array = 1;
             lvar->type->ptrs++;
             lvar->type->array_size = expect_number();
             expect("]");
         }
 
-        // メモリ上のサイズ
-        int offset = 1;
-        if (lvar->type->array)
-            offset = lvar->type->array_size;
-        if (lvar->type->ptrs > 0)
-            offset *= PTR_SIZE;
-        else if (lvar->type->ty == INT)
-            offset *= INT_SIZE;
-        else if (lvar->type->ty == CHAR)
-            offset *= CHAR_SIZE;
-        else
-            error_at(token->str, "型を処理できません");
-        lvar->offset = offset;
+        // グローバル変数のメモリサイズ設定
+        memory_size(lvar);
 
         // 連結リスト構築
         lvar->next = global_var;
@@ -432,14 +438,8 @@ Node *unary() {
         return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
-	else if (consume_kind(TK_SIZEOF)) {
-        Node *node = unary();
-        VarType *expr_type = AST_type(node);
-        if (expr_type->ptrs == 0)
-            return new_num(4); // int
-        else
-            return new_num(PTR_SIZE);
-    }
+	else if (consume_kind(TK_SIZEOF))
+        return new_num(AST_type(unary())->size);
     return primary();
 }
 
@@ -482,10 +482,9 @@ Node *primary() {
                 node->offset = lvar->offset;
 
             // 配列の場合
-            if (node->lvar->type->array) {
-                node->kind = ND_ARRAY;
+            if (node->lvar->type->array_size) {
                 // 添え字の場合
-                if (node->lvar->type->array && consume("[")) { 
+                if (consume("[")) { 
                     node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
                     expect("]");
                 }

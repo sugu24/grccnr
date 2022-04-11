@@ -16,6 +16,10 @@ assert(){
 	fi
 }
 
+assert 3 'int main() { int a = 1 + 1; a = a + 1; return a; }'
+
+assert 1 'int main() { char x[3]; x[0] = 1; return x[0]; }'
+assert 1 'int main() { char x[3]; x[0] = 1; int y = 1; return x[0]; }'
 assert 3 'int main() { char x[3]; x[0] = -1; int y = 4; return x[0] + y; }'
 assert 3 'int main() { char x[3]; x[1] = -1; x[0] = x[1]; int y = 4; return x[0] + y; }'
 assert 3 'int main() { char x[3]; *(x+1) = -1; x[0] = x[1]; int y = 4; return x[0] + y; }'
@@ -41,7 +45,6 @@ assert 4 'int main() { int x; int *y; return sizeof(sizeof(1)); }'
 assert 11 'int foo() { return 11; } int bar(int a,int b) { return a * 10 + b; } int main() { int c = bar(1,1); return c; }'
 assert 11 'int bar(int a,int b) { return a * 10 + b; } int main() { int c = bar(1,1); return c; }'
 assert 4 'int main() { int *a; int b = 4; a = &b; *a = *a - 1; *a = *a - 1; return 2*b;}'
-assert 3 'int main() { int a = 1 + 1; a = a + 1; return a; }'
 assert 2 'int main() { int a = 1; int b = 1; return b + 1; }'
 
 
@@ -49,7 +52,7 @@ assert 4 'int bar(int *x) { *x = 4; } int main() { int *a; int b = 1; a = &b; ba
 assert 10 'int bar(int **x) { int y = 10; *x = &y; } int main() { int *a; int b; b = 1; a = &b; bar(&a); return *a; }'
 
 assert 3 'int main() { int x; x = 3; int *y; y = &x; return *y; }'
-assert 3 'int main() { int x = 3; int y = 5; int *z = &y + 8; return *z; }'
+assert 3 'int main() { int x = 3; int y = 5; int *z = &y + 4; return *z; }'
 
 assert 20 'int main() { int bar = 2; if (bar == 2) bar = bar * 10; return bar; }'
 assert 1 'int main() { int bar = 0; if (bar == 0) bar = 1; else if (bar > 0) bar = bar * 10; return bar; }'
