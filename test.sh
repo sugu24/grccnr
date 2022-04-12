@@ -4,7 +4,8 @@ assert(){
 	input="$2"
 
 	./grccnr "$input" > temp.s
-	cc -o temp temp.s link.o
+	cc -o temp.o -c temp.s
+	cc -o temp temp.o link.o
 	./temp
 	actual="$?"
 
@@ -16,8 +17,18 @@ assert(){
 	fi
 }
 
+assert 0 'int main() { int a = 1; int b = 2; printf("a=%d, b=%d, a+b=%d\n", a, b, a+b); return 0; }'
+assert 0 'int main() { int a = 1; printf("a is %d.\n", a); }'
+assert 3 'int a[3]; int main() { a[0] = 1; a[1] = 2; a[2] = a[0] + a[1]; return a[2]; }'
+assert 3 'int a; int b; int main() { a = 3; b = a; return b; }'
+assert 0 'char *str1; char *str2; int main() { str1 = "aa"; str2 = str1; printf("str2 = %s\n", str2); return 0; }'
+assert 0 'char *str; int main() { str = "aaaaa"; printf("str = %s\n", str); return 0; }'
+
 assert 3 'int main() { int a = 1 + 1; a = a + 1; return a; }'
 
+assert 4 'int a; int main() { return sizeof(a); }'
+assert 1 'char a; int main() { return sizeof(a); }'
+assert 8 'int *a; int main() { return sizeof(a); }'
 assert 1 'int main() { char x[3]; x[0] = 1; return x[0]; }'
 assert 1 'int main() { char x[3]; x[0] = 1; int y = 1; return x[0]; }'
 assert 3 'int main() { char x[3]; x[0] = -1; int y = 4; return x[0] + y; }'

@@ -3,9 +3,11 @@
 Func *code[1024];
 LVar *locals;
 LVar *global_var;
+LVar *strs;
 Func *now_func;
 
 int control = 0;
+int str_num = 0;
 
 Node *new_node(NodeKind kind) {
 	Node *node = calloc(1, sizeof(Node));
@@ -490,6 +492,20 @@ Node *primary() {
                 }
             }    
         }
+        return node;
+    }
+    
+    // 文字リテラル
+    tok = consume_kind(TK_STR);
+    if (tok) {
+        // strsに追加してND_STRに設定
+        LVar *str = calloc(1, sizeof(LVar));
+        Node *node = new_node(ND_STR);
+        node->lvar = str;
+        str->offset = str_num++;
+        str->str = str_copy(tok);
+        str->next = strs;
+        strs = str;
         return node;
     }
 

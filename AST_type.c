@@ -23,6 +23,12 @@ VarType *func_type(Node *node) {
         arg_check(now_func, node)) 
         return now_func->type;
     
+    if (strcmp("printf", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= INT;
+        p->size = INT_SIZE;
+        return p;
+    }
     error_at(token->str, "一致する関数がありません");
 }
 
@@ -67,6 +73,12 @@ VarType *AST_type(Node *node) {
             var_type->ty = INT;
             var_type->ptrs = 0;
             var_type->size = INT_SIZE;
+            return var_type;
+        case ND_STR:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = CHAR;
+            var_type->ptrs = 1;
+            var_type->size = PTR_SIZE;
             return var_type;
         case ND_ADDR:
             AST_type(node->lhs);

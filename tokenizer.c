@@ -85,6 +85,7 @@ Token *tokenize() {
 	head.next = NULL;
 	Token *cur = &head;
     int len;
+    int str = 0;
 
 	while (*p) {
 		// 空白文字をスキップ
@@ -112,6 +113,20 @@ Token *tokenize() {
 			cur->len = p - q;
 			continue;
 		}
+
+        // ダブル久オートで記される文字列
+        if (strchr("\"", *p)) {
+            p++;
+            char *q = p;
+            while (!strchr("\"", *q)) {
+                q++;
+                if (!*p) 
+                    error("ダブルクオートで閉じられていません");
+            }
+            cur = new_token(TK_STR, cur, p, q-p);
+            p = q+1;
+            continue;
+        }
 
         // トークンが数字以外なら文字列の長さを取得して予約語か変数か判定
         if (len = token_len(p)) {
