@@ -58,7 +58,7 @@ int gen_arg_push(LVar *arg) {
 
 // raxにデータを転送する
 void mov_rax_data(Node *node) {
-    int size = AST_type(node)->size;
+    int size = get_size(AST_type(node));
     if (size == 1)
         printf("  movsx rax, BYTE PTR [rax]\n");
     else if (size == 4)
@@ -76,7 +76,7 @@ void gen_addr(Node *node) {
             gen_stmt(node->lhs);
             break;
         case ND_LVAR:
-            if (node->lvar->type->glb_var)
+            if (node->lvar->glb_var)
                 printf("  lea rax, %s[rip]\n", node->lvar->name);
             else {
                 printf("  mov rax, rbp\n");
@@ -208,7 +208,7 @@ void gen_stmt(Node *node) {
             printf("  push rax\n");
             return;
         case ND_LVAR: // 変数
-            if (node->lvar->type->glb_var) 
+            if (node->lvar->glb_var) 
                 printf("  lea rax, %s[rip]\n", node->lvar->name);
             else {
                 printf("  mov rax, rbp\n");
@@ -216,7 +216,7 @@ void gen_stmt(Node *node) {
             }
             
             // 配列でないならデータをraxへ
-            if (node->lvar->type->array_size == 0)
+            if (!(node->lvar->type->ty == ARRAY))
                 mov_rax_data(node);
             printf("  push rax\n");
             return;
@@ -225,15 +225,17 @@ void gen_stmt(Node *node) {
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
-            printf("  pop rax\n");
-            mov_rax_data(node);
-            printf("  push rax\n");
+            if (node->array_accessing == 0) {
+                printf("  pop rax\n");
+                mov_rax_data(node);
+                printf("  push rax\n");
+            }
             return;
         case ND_ASSIGN:
             gen_addr(node->lhs);
             gen_stmt(node->rhs);
 
-            size = min(AST_type(node->lhs)->size, AST_type(node->rhs)->size);
+            size = min(get_size(AST_type(node->lhs)), get_size(AST_type(node->rhs)));
 
             printf("  pop rdi\n");
             printf("  pop rax\n");
@@ -323,7 +325,7 @@ void gen_global_var() {
     printf(".data\n");
     for (glb_var = global_var; glb_var; glb_var = glb_var->next) {
         printf("%s:\n", glb_var->name);
-        printf("  .zero %d\n", glb_var->type->size);
+        printf("  .zero %d\n", get_size(glb_var->type));
     }
 
     for (glb_var = strs; glb_var; glb_var = glb_var->next) {

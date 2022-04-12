@@ -23,24 +23,42 @@ VarType *func_type(Node *node) {
         arg_check(now_func, node)) 
         return now_func->type;
     
+    // printfはlink.cのstdio.hを使う
     if (strcmp("printf", node->func_name) == 0) {
         VarType *p = calloc(1, sizeof(VarType));
         p->ty= INT;
-        p->size = INT_SIZE;
         return p;
     }
     error_at(token->str, "一致する関数がありません");
 }
 
+// 戻り値が関数の戻り値と一致しているか
+int returnable(VarType *func_type, VarType *return_type) {
+    while (func_type->ty == return_type->ty) {
+        if (!func_type->ptr_to && !return_type->ptr_to)
+            return 1;
+        else if (!func_type->ptr_to || !return_type->ptr_to)
+            return 0;
+        func_type = func_type->ptr_to;
+        return_type = return_type->ptr_to;
+    }
+    return 0;
+}
+
 // 変数のサイズを返す
 // get_size呼ぶときは*を処理した後
 int get_size(VarType *type) {
-    // pt
-    if (type->ptrs && type->ptrs - (type->array_size > 0)) return PTR_SIZE;
     switch (type->ty) {
-        case INT: return INT_SIZE;
-        case CHAR: return CHAR_SIZE;
-        default: error("型が処理できません");
+        case INT: 
+            return INT_SIZE;
+        case CHAR: 
+            return CHAR_SIZE;
+        case PTR:
+            return PTR_SIZE;
+        case ARRAY:
+            return type->array_size * get_size(type->ptr_to);
+        default:
+            error_at(token->str, "型が処理できません");
     }
 }
 
@@ -48,6 +66,7 @@ int get_size(VarType *type) {
 VarType *AST_type(Node *node) {
     VarType *lhs_var_type, *rhs_var_type;
     VarType *var_type; // 整数や比較演算の場合に使う
+    int lsize, rsize;
     switch (node->kind) {
         case ND_ADD:
             lhs_var_type = AST_type(node->lhs);
@@ -71,83 +90,74 @@ VarType *AST_type(Node *node) {
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
-            var_type->ptrs = 0;
-            var_type->size = INT_SIZE;
+            /*
+            if (node->val < (1 << 8))
+                var_type->ty = CHAR;
+            else if ((long int)node->val < ((long int)1 << 32))
+                var_type->ty = INT;
+            else
+                error_at(token->str, "数字が4バイトより大きいため処理できません");
+            */
             return var_type;
         case ND_STR:
             var_type = calloc(1, sizeof(VarType));
-            var_type->ty = CHAR;
-            var_type->ptrs = 1;
-            var_type->size = PTR_SIZE;
+            var_type->ty = PTR;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = CHAR;
             return var_type;
         case ND_ADDR:
             AST_type(node->lhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = PTR;
-            var_type->ptrs = 0;
-            var_type->size = PTR_SIZE;
             return var_type;
         case ND_DEREF:
-            lhs_var_type = AST_type(node->lhs);
-            lhs_var_type->ptrs--;
-            if (lhs_var_type->ptrs < 0)
+            var_type = AST_type(node->lhs);
+            if (var_type->ptr_to)
+                var_type = var_type->ptr_to;
+            else
                 error_at(token->str, "式内のポインタの型が一致しません");
-            else if(lhs_var_type->ptrs == 0)
-                lhs_var_type->size = get_size(lhs_var_type);
-            return lhs_var_type;
+            return var_type;
         case ND_EQ:
             AST_type(node->lhs);
             AST_type(node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
-            var_type->ptrs = 0;
-            var_type->size = INT_SIZE;
             return var_type;
         case ND_NE:
             AST_type(node->lhs);
             AST_type(node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
-            var_type->ptrs = 0;
-            var_type->size = INT_SIZE;
             return var_type;
         case ND_LT:
             AST_type(node->lhs);
             AST_type(node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
-            var_type->ptrs = 0;
-            var_type->size = INT_SIZE;
             return var_type;
         case ND_LE:
             AST_type(node->lhs);
             AST_type(node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
-            var_type->ptrs = 0;
-            var_type->size = INT_SIZE;
             return var_type;
         case ND_ASSIGN:
             lhs_var_type = AST_type(node->lhs);
             rhs_var_type = AST_type(node->rhs);
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
-            if (lhs_var_type->ptrs < rhs_var_type->ptrs)
+            lsize = get_size(lhs_var_type);
+            rsize = get_size(rhs_var_type);
+            if (lsize > 8 || rsize > 8)
                 error_at(token->str, "右辺と左辺の型が一致しません");
             return rhs_var_type;
         case ND_LVAR:
-            var_type = calloc(1, sizeof(VarType));
-            var_type->ty = node->lvar->type->ty;
-            var_type->ptrs = node->lvar->type->ptrs;
-            var_type->size = get_size(var_type);
-            var_type->array_size = node->lvar->type->array_size;
             //printf("# type->ptrs=%d, type->array_size=%d\n", var_type->ptrs, var_type->array_size);
-            return var_type;
+            return node->lvar->type;
         case ND_RETURN:
             lhs_var_type = AST_type(node->lhs);
-            if (now_func->type->ty == lhs_var_type->ty &&
-                now_func->type->ty == lhs_var_type->ptrs)
+            if (returnable(now_func->type, lhs_var_type))
                 return lhs_var_type;
-            else 
+            else
                 error_at(token->str, "戻り値の型が異なります");
         case ND_IF:
             error_at(token->str, "if節は評価出来ません");
@@ -176,18 +186,12 @@ VarType *AST_type(Node *node) {
 
     // それぞれ指している値の意味が異なる場合
     // ptrs--してからsizeを取得 例) int*なら+4
-    if (lhs_var_type->ptrs >= 1 && rhs_var_type->ptrs == 0) {
-        lhs_var_type->ptrs--;
-        node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type)));
-        lhs_var_type->ptrs++;
-        node->rhs->ptrs++;
+    if (lhs_var_type->ptr_to && !rhs_var_type->ptr_to) {
+        node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
         return lhs_var_type;
     }
-    else if (lhs_var_type->ptrs == 0 && rhs_var_type->ptrs >= 1) {
-        rhs_var_type->ptrs--;
-        node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type)));
-        rhs_var_type->ptrs++;
-        node->lhs->ptrs++;
+    else if (!lhs_var_type->ptr_to && rhs_var_type->ptr_to) {
+        node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         return rhs_var_type;
     }
 

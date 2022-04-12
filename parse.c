@@ -44,32 +44,6 @@ LVar *find_lvar(Token *tok) {
     return NULL;
 }
 
-// メモリサイズ設定
-int memory_size(LVar *lvar) {
-    // メモリ上のサイズ
-    int offset = 1;
-    if (lvar->type->array_size)
-        offset = lvar->type->array_size;
-    
-    // ポインタ格納ではない配列または変数
-    if (lvar->type->ptrs == 0 ||
-       (lvar->type->array_size > 0 && lvar->type->ptrs == 1)) {
-        if (lvar->type->ty == INT)
-            offset *= INT_SIZE;
-        else if (lvar->type->ty == CHAR)
-            offset *= CHAR_SIZE;
-        else
-            error_at(token->str, "型を処理できません");
-    }
-    // ポインタを格納する変数
-    else if (lvar->type->ptrs > 0)
-        offset *= PTR_SIZE;
-    
-    lvar->type->size = offset;
-    //printf("#%d %d %d\n", lvar->type->array_size, lvar->type->ty, offset);
-    return offset;
-}
-
 // ND_BLOCKを返す　先頭のstmtはNULL
 Node *create_block_node() {
     Node *head_node = new_node(ND_BLOCK);
@@ -177,24 +151,31 @@ Node *create_return_node() {
 
 // 変数の型を返す
 VarType *new_var_type(Token *tok) {
-    VarType *var_type = calloc(1, sizeof(VarType));
-    int ptrs = 0;
+    VarType *var_type, *next_var_type, *top_var_type;
+    Type type;
+    top_var_type = var_type = calloc(1, sizeof(VarType));
     if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "int", tok->len) == 0)
-        var_type->ty = INT;
+        type = INT;
     else if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "char", tok->len) == 0)
-        var_type->ty = CHAR;
+        type = CHAR;
     else
         error_at(tok->str, "未定義の型です");
     
-    while (consume("*")) ptrs++;
-    var_type->ptrs = ptrs;
-    return var_type;
+    while (consume("*")) {
+        next_var_type = calloc(1, sizeof(VarType));
+        var_type->ty = PTR;
+        var_type->ptr_to = next_var_type;
+        var_type = next_var_type;
+    }
+    var_type->ty = type;
+    return top_var_type;
 }
 
 // 変数の宣言 失敗なら途中でexitされる
 Token *declare_var(Token *tok_var_type) {
     Token *tok_var_name;
     LVar *lvar = calloc(1, sizeof(LVar));
+    VarType *array_top, *array_bfr, *array_now;
 
     // 変数の型
     lvar->type = new_var_type(tok_var_type);
@@ -211,13 +192,21 @@ Token *declare_var(Token *tok_var_type) {
     lvar->len = tok_var_name->len;
     
     // []?
-    if (consume("[")) {
-        lvar->type->ptrs++;
-        lvar->type->array_size = expect_number();
+    array_top = array_bfr = calloc(1, sizeof(VarType));
+    while (consume("[")) {
+        array_now = calloc(1, sizeof(VarType));
+        array_now->ty = ARRAY;
+        array_bfr->ptr_to = array_now;
+        array_now->array_size = expect_number();
+        array_bfr = array_now;
+        if (array_now->array_size <= 0)
+            error_at(token->str, "配列のサイズは正の整数である必要があります");
         expect("]");
     }
+    array_bfr->ptr_to = lvar->type;
+    lvar->type = array_top->ptr_to;
 
-    int offset = memory_size(lvar);
+    int offset = get_size(lvar->type);
     // RBPからのオフセット
     if (locals)
         lvar->offset = locals->offset + offset;
@@ -251,13 +240,12 @@ void program() {
 Func *glbstmt() {
     Func *func; // 関数の場合に仕様
     Token *tok_var_type, *tok_var_name;
-    VarType *type; // 型
+    VarType *type, *array_var_type; // 型
     
     // 型取得
     tok_var_type = consume_kind(TK_VAR_TYPE);
     if (!tok_var_type) error_at(token->str, "型である必要があります");
     type = new_var_type(tok_var_type);
-    type->size = get_size(type);
 
     // 関数名 or グローバル変数名取得
     tok_var_name = consume_kind(TK_IDENT);
@@ -292,21 +280,30 @@ Func *glbstmt() {
         return func;
     } 
     else { // グローバル変数
+        VarType *array_top, *array_bfr, *array_now;
         LVar *lvar = calloc(1, sizeof(LVar));
         lvar->type = type;
         lvar->name = str_copy(tok_var_name);
         lvar->len = tok_var_name->len;
-        lvar->type->glb_var = 1;
+        lvar->glb_var = 1;
 
         // 配列?
-        if (consume("[")) {
-            lvar->type->ptrs++;
-            lvar->type->array_size = expect_number();
+        array_top = array_bfr = calloc(1, sizeof(VarType));
+        while (consume("[")) {
+            array_now = calloc(1, sizeof(VarType));
+            array_now->ty = ARRAY;
+            array_bfr->ptr_to = array_now;
+            array_now->array_size = expect_number();
+            array_bfr = array_now;
+            if (array_now->array_size <= 0)
+                error_at(token->str, "配列のサイズは正の整数である必要があります");
             expect("]");
         }
+        array_bfr->ptr_to = lvar->type;
+        lvar->type = array_top->ptr_to;
 
         // グローバル変数のメモリサイズ設定
-        memory_size(lvar);
+        lvar->offset = get_size(lvar->type);
 
         // 連結リスト構築
         lvar->next = global_var;
@@ -327,6 +324,13 @@ stmt = expr ";"
 */
 Node *stmt() {
     Node *node;
+    Token *tok;
+
+    while (tok = consume_kind(TK_VAR_TYPE)) {
+        declare_var(tok);
+        expect(";");
+    }
+
     if (consume("{")) { // block文
         node = create_block_node();
         return node;
@@ -352,13 +356,7 @@ Node *stmt() {
 
 // expr = assign
 Node *expr() {
-    Node *node;
-    Token *tok = consume_kind(TK_VAR_TYPE);
-    if (tok) {// 変数宣言
-        token = declare_var(tok); // int a = 1;のように宣言後に代入を考慮
-    }
-
-    node = assign();
+    Node *node = assign();
     AST_type(node);
 	return node;
 }
@@ -441,7 +439,7 @@ Node *unary() {
     else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
 	else if (consume_kind(TK_SIZEOF))
-        return new_num(AST_type(unary())->size);
+        return new_num(get_size(AST_type(unary())));
     return primary();
 }
 
@@ -480,16 +478,18 @@ Node *primary() {
             
             // 既存の変数
             node->lvar = lvar;
-            if (!lvar->type->glb_var)
+            if (!lvar->glb_var)
                 node->offset = lvar->offset;
 
             // 配列の場合
             if (node->lvar->type->array_size) {
                 // 添え字の場合
-                if (consume("[")) { 
+                while (consume("[")) {
                     node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
+                    node->array_accessing = 1;
                     expect("]");
                 }
+                node->array_accessing = 0;
             }    
         }
         return node;
