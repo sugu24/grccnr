@@ -17,7 +17,9 @@ assert(){
 	fi
 }
 
-assert 12 'int main() { int a[4][3]; return sizeof(a[3]); }'
+assert 0 testcase/test1.gc
+assert 34 testcase/test2.gc
+assert 100 testcase/end.gc
 assert 1 'int main() { int a[4][3]; a[3][2] = 1; return a[3][2]; }'
 
 assert 97 'int main() { char a; char b[3]; b[0] = 97; a = b[0]; return a; }'

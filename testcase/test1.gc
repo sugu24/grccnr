@@ -1,0 +1,36 @@
+int H;
+int W;
+
+int printMass(char *mass) {
+	int i;
+	int j;
+	printf("print start\n");
+	for (i = 0; i < H; i = i + 1) {
+		for (j = 0; j < W; j = j + 1) {
+			printf("%c", *(mass+i*H+j));
+		}
+		printf("\n");
+	}
+	printf("print end\n");
+}
+
+int main() {
+	char mass[100];
+	int i;
+	int j;
+	H = 5;
+	W = 5;
+	for (i = 0; i < H; i = i + 1) {
+		for (j = 0; j < W; j = j + 1) {
+			mass[i*H+j] = 97;
+		}
+	}
+
+	for (i = 0; i < H; i = i + 2) {
+		for (j = 0; j < W; j = j + 2) {
+			mass[i*H+j] = 100;
+		}
+	}
+
+	printMass(mass);
+}
