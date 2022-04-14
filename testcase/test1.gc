@@ -1,6 +1,7 @@
 int H;
 int W;
 
+// マスを全てprintする
 int printMass(char *mass) {
 	int i;
 	int j;
@@ -14,6 +15,12 @@ int printMass(char *mass) {
 	printf("print end\n");
 }
 
+/*
+  H*Wの1次元配列に
+  index % 2 == 0 -> a
+  index % 2 == 1 -> d
+  を代入してprintする
+*/
 int main() {
 	char mass[100];
 	int i;
