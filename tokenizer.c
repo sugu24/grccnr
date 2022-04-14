@@ -1,11 +1,22 @@
 #include "grccnr.h"
 
+bool token_str(char *op) {
+    if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len))
+		return false;
+    else 
+        return true;
+}
+
+bool token_kind(TokenKind kind) {
+    if (token->kind == kind) return true;
+    else return false;
+}
+
 // 次のトークンが期待している記号のときにはトークンを1つ読み進めて
 // 真を返す。それ以外の場合には偽を返す。
 bool consume(char *op) {
-	if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len)) {
-		return false;
-    }
+	if (!token_str(op))
+        return false;
 	token = token->next;
 	return true;
 }
@@ -13,7 +24,7 @@ bool consume(char *op) {
 // 次のトークンが指定されたkindならTokenを返す
 Token *consume_kind(TokenKind kind) {
     Token *tok = token;
-    if (tok->kind != kind)
+    if (!token_kind(kind))
         return NULL;
     token = token->next;
     return tok;
@@ -22,7 +33,7 @@ Token *consume_kind(TokenKind kind) {
 // 次のトークンが期待している記号のときには。トークンを1つ読み進める
 // それ以外の場合にはエラーを報告する。
 void expect(char *op) {
-	if (token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len))
+	if (!token_str(op))
 		error_at(token->str, "expected '%s'", op);
 	token = token->next;
 }

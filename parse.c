@@ -32,14 +32,17 @@ Node *new_num(int val) {
 LVar *find_lvar(Token *tok) {
     // ローカル変数
     for (LVar *var = locals; var; var = var->next) {
-        if (var->len == tok->len && !memcmp(tok->str, var->name, var->len))
+        if (var->len == tok->len && 
+            !memcmp(tok->str, var->name, var->len))
             return var;
     }
 
     // グローバル変数
     for (LVar *var = global_var; var; var = var->next) {
-        if (var->len == tok->len && !memcmp(tok->str, var->name, var->len))
+        if (var->len == tok->len && 
+            !memcmp(tok->str, var->name, var->len)) {
             return var;
+        }
     }
     return NULL;
 }
@@ -149,11 +152,22 @@ Node *create_return_node() {
     return node;
 }
 
+// 関数名を(までヒープ領域にコピーしてそれを指す
+char *str_copy(Token *tok) {
+    char *temp = (char*)malloc(sizeof(char) * (tok->len + 1));
+    strncpy(temp, tok->str, tok->len);
+    temp[tok->len] = '\0';
+    return temp;
+}
+
 // 変数の型を返す
-VarType *new_var_type(Token *tok) {
+VarType *new_var_type() {
     VarType *var_type, *next_var_type, *top_var_type;
     Type type;
     top_var_type = var_type = calloc(1, sizeof(VarType));
+    Token *tok = consume_kind(TK_VAR_TYPE);
+    if (!tok) return NULL;
+
     if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "int", tok->len) == 0)
         type = INT;
     else if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "char", tok->len) == 0)
@@ -172,14 +186,17 @@ VarType *new_var_type(Token *tok) {
 }
 
 // 変数の宣言 失敗なら途中でexitされる
-Token *declare_var(Token *tok_var_type) {
+// type: 0->arg 1->locals 2->global
+LVar *declare_var(int type) {
     Token *tok_var_name;
     LVar *lvar = calloc(1, sizeof(LVar));
     VarType *array_top, *array_bfr, *array_now;
 
     // 変数の型
-    lvar->type = new_var_type(tok_var_type);
-
+    lvar->type = new_var_type();
+    if (!lvar)
+        return NULL;
+    
     // 変数名
     tok_var_name = consume_kind(TK_IDENT);
     
@@ -188,9 +205,17 @@ Token *declare_var(Token *tok_var_type) {
     if (find_lvar(tok_var_name)) 
         error_at(tok_var_name->str, "既に宣言された変数名です");
     
-    lvar->name = tok_var_name->str;
+    lvar->name = str_copy(tok_var_name);
     lvar->len = tok_var_name->len;
     
+    // 関数ならreturn グローバル変数ならlvar->glb_var=1
+    if (type == 2) {
+        if (token_str("("))
+            return lvar;
+        else
+            lvar->glb_var = 1;
+    }
+
     // []?
     array_top = array_bfr = calloc(1, sizeof(VarType));
     while (consume("[")) {
@@ -208,22 +233,29 @@ Token *declare_var(Token *tok_var_type) {
 
     int offset = get_size(lvar->type);
     // RBPからのオフセット
-    if (locals)
+    // type==2はグローバル変数
+    if (type == 2)
+        lvar->offset = offset;
+    else if (locals)
         lvar->offset = locals->offset + offset;
     else
         lvar->offset = offset;
 
-    lvar->next = locals;
-    locals = lvar;
-    return tok_var_name;
-}
+    return lvar;
 
-// 関数名を(までヒープ領域にコピーしてそれを指す
-char *str_copy(Token *tok) {
-    char *temp = (char*)malloc(sizeof(char) * (tok->len + 1));
-    strncpy(temp, tok->str, tok->len);
-    temp[tok->len] = '\0';
-    return temp;
+    // 引数
+    if (type == 0)
+        return lvar;
+    
+    // 初期化なしで変数宣言終了
+    if (token_str(";"))
+        return lvar;
+
+    // 初期化ありローカル変数かグローバル変数
+    if (consume("=")) {
+
+    } else 
+        error_at(token->str, " ; か = である必要があります");
 }
 
 // ---------- parser ---------- //
@@ -239,27 +271,15 @@ void program() {
 
 Func *glbstmt() {
     Func *func; // 関数の場合に仕様
-    Token *tok_var_type, *tok_var_name;
-    VarType *type, *array_var_type; // 型
-    
-    // 型取得
-    tok_var_type = consume_kind(TK_VAR_TYPE);
-    if (!tok_var_type) error_at(token->str, "型である必要があります");
-    type = new_var_type(tok_var_type);
+    LVar *var_or_func, *arg_var;
+    var_or_func = declare_var(2);
 
-    // 関数名 or グローバル変数名取得
-    tok_var_name = consume_kind(TK_IDENT);
-    if (!tok_var_name) error_at(token->str, "変数名か関数名である必要があります");
-
-    // "("なら関数 それ以外ならグローバル変数
+    // 関数
     if (consume("(")) {
         func = calloc(1, sizeof(Func));
         now_func = func;
 
-        // 型と関数名の代入
-        func->type = type;
-        func->func_name = str_copy(tok_var_name);
-
+        func->func_type_name = var_or_func;
         // ローカル変数の初期化
         locals = NULL;
 
@@ -268,8 +288,11 @@ Func *glbstmt() {
             if (i == 6)
                 error_at(token->str, "引数が7つ以上に対応していません");
             
-            tok_var_type = consume_kind(TK_VAR_TYPE);
-            if (tok_var_type) declare_var(tok_var_type); 
+            if (token_kind(TK_VAR_TYPE)) { 
+                arg_var = declare_var(0);
+                arg_var->next = locals;
+                locals = arg_var;
+            } 
             if (consume(",")) continue;
             else if (consume(")")) break;
             else error_at(token->str, "','か')'である必要があります");
@@ -279,40 +302,15 @@ Func *glbstmt() {
         func->locals = locals; // ローカル変数
         return func;
     } 
-    else { // グローバル変数
-        VarType *array_top, *array_bfr, *array_now;
-        LVar *lvar = calloc(1, sizeof(LVar));
-        lvar->type = type;
-        lvar->name = str_copy(tok_var_name);
-        lvar->len = tok_var_name->len;
-        lvar->glb_var = 1;
-
-        // 配列?
-        array_top = array_bfr = calloc(1, sizeof(VarType));
-        while (consume("[")) {
-            array_now = calloc(1, sizeof(VarType));
-            array_now->ty = ARRAY;
-            array_bfr->ptr_to = array_now;
-            array_now->array_size = expect_number();
-            array_bfr = array_now;
-            if (array_now->array_size <= 0)
-                error_at(token->str, "配列のサイズは正の整数である必要があります");
-            expect("]");
-        }
-        array_bfr->ptr_to = lvar->type;
-        lvar->type = array_top->ptr_to;
-
-        // グローバル変数のメモリサイズ設定
-        lvar->offset = get_size(lvar->type);
-
+    // グローバル変数
+    else {
         // 連結リスト構築
-        lvar->next = global_var;
-        global_var = lvar;
+        var_or_func->next = global_var;
+        global_var = var_or_func;
         expect(";");
 
         return NULL;
-    } 
-    return func;
+    }
 }
 
 /* 
@@ -324,11 +322,16 @@ stmt = expr ";"
 */
 Node *stmt() {
     Node *node;
-    Token *tok;
+    LVar *lvar;
 
-    while (tok = consume_kind(TK_VAR_TYPE)) {
-        declare_var(tok);
+    // 変数宣言
+    while (token_kind(TK_VAR_TYPE)) {
+        lvar = declare_var(1);
+        lvar->next = locals;
+        locals = lvar;
         expect(";");
+        if (lvar->invalid) 
+            return lvar->invalid;
     }
 
     if (consume("{")) { // block文
@@ -453,6 +456,7 @@ Node *primary() {
     
 	// それ以外なら数値(関数)か変数
     Token *tok = consume_kind(TK_IDENT);
+    //printf("%s\n", token->str);
     if (tok) {
         Node *node = calloc(1, sizeof(Node));
         if (consume("(")) { // 関数の場合

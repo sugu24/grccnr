@@ -14,14 +14,14 @@ int arg_check(Func *func, Node *node) {
 // 一致する関数の型を返す
 VarType *func_type(Node *node) {
     for (int i = 0; code[i]; i++) {
-        if (strcmp(code[i]->func_name, node->func_name) == 0 &&
+        if (strcmp(code[i]->func_type_name->name, node->func_name) == 0 &&
             arg_check(code[i], node))
-            return code[i]->type;
+            return code[i]->func_type_name->type;
     }
 
-    if (strcmp(now_func->func_name, node->func_name) == 0 && 
+    if (strcmp(now_func->func_type_name->name, node->func_name) == 0 && 
         arg_check(now_func, node)) 
-        return now_func->type;
+        return now_func->func_type_name->type;
     
     // printfはlink.cのstdio.hを使う
     if (strcmp("printf", node->func_name) == 0) {
@@ -155,7 +155,7 @@ VarType *AST_type(Node *node) {
             return node->lvar->type;
         case ND_RETURN:
             lhs_var_type = AST_type(node->lhs);
-            if (returnable(now_func->type, lhs_var_type))
+            if (returnable(now_func->func_type_name->type, lhs_var_type))
                 return lhs_var_type;
             else
                 error_at(token->str, "戻り値の型が異なります");

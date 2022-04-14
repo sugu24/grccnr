@@ -43,7 +43,7 @@ void error_at(char *loc, char *fmt, ...) {
     // エラーカ所を ^ で指示してエラーメッセージを表示
     int pos = loc - line + indent;
     fprintf(stderr, "%*s", pos, "");
-    fprintf(stderr, "^ \n");
+    fprintf(stderr, "^ ");
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
     exit(1);
@@ -84,7 +84,7 @@ int main(int argc, char** argv){
 	// トークナイズしてパースする
     filename = argv[1];
 	user_input = read_file(filename);
-	token = tokenize();
+    token = tokenize();
 	program();
     
 	// アセンブリの前半部分を出力

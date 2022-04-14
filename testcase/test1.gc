@@ -8,36 +8,37 @@ int printMass(char *mass) {
 	printf("print start\n");
 	for (i = 0; i < H; i = i + 1) {
 		for (j = 0; j < W; j = j + 1) {
-			printf("%c", *(mass+i*H+j));
-		}
-		printf("\n");
-	}
-	printf("print end\n");
+      			printf("%c", *(mass+i*H+j));
+    		}
+    		printf("\n");
+  	}
+  	printf("print end\n");
 }
 
-/*
-  H*Wの1次元配列に
-  index % 2 == 0 -> a
-  index % 2 == 1 -> d
-  を代入してprintする
-*/
+//  H*Wの1次元配列に
+//  index % 2 == 0 -> a
+//  index % 2 == 1 -> d
+//  を代入してprintする
 int main() {
-	char mass[100];
+  	char mass[100];
 	int i;
-	int j;
-	H = 5;
-	W = 5;
-	for (i = 0; i < H; i = i + 1) {
-		for (j = 0; j < W; j = j + 1) {
-			mass[i*H+j] = 97;
-		}
-	}
+  	int j;
+  	H = 5;
+  	W = 5;
+  
+  	for (i = 0; i < H; i = i + 1) {
+    		for (j = 0; j < W; j = j + 1) {
+      			mass[i*H+j] = 97;
+    		}
+  	}
 
-	for (i = 0; i < H; i = i + 2) {
-		for (j = 0; j < W; j = j + 2) {
-			mass[i*H+j] = 100;
-		}
-	}
+  	for (i = 0; i < H; i = i + 2) {
+    		for (j = 0; j < W; j = j + 2) {
+      			mass[i*H+j] = 100;
+    		}
+  	}
 
-	printMass(mass);
+ 	 printMass(mass);
+  
 }
+

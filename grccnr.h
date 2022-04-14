@@ -113,19 +113,19 @@ struct VarType {
 
 // 変数の型
 struct LVar {
-    LVar *next; // 次の変数かNULL
+    LVar *next; // 次は変数かNULL
+    VarType *type; // 変数の型
+    Node *invalid; // グローバル変数の初期値
     char *name; // 変数の名前
     char *str;  // 文字リテラル
     int len;    // len(name)
     int offset; // RBPからのオフセット
     int glb_var;  // グローバル変数
-    VarType *type; // 変数の型
 };
 
 // 関数の型
 struct Func {
-    char *func_name;
-    VarType *type;
+    LVar *func_type_name;
     LVar *arg;
     LVar *locals;
     Node *stmt;
@@ -136,6 +136,8 @@ void error(char *fmt, ...);
 void error_at(char *loc, char *fmt, ...);
 
 // ---------- tokenizer ---------- //
+bool token_str(char *op);
+bool token_kind(TokenKind kind);
 bool consume(char *op);
 Token *consume_kind(TokenKind kind);
 void expect(char *op);

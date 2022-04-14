@@ -300,7 +300,7 @@ void gen_stmt(Node *node) {
 
 // 関数のジェネレータ
 void gen_func(Func *func) {
-    printf("%s:\n", func->func_name);
+    printf("%s:\n", func->func_type_name->name);
 
     // プロローグ
     printf("  push rbp\n");
