@@ -1,0 +1,8 @@
+int a = 1 + 1;
+char b = 97;
+int *c = &a;
+
+int main() {
+  printf("a=%d, b=%c, c=%d\n", a, b, *c);
+  return 0;
+}

@@ -22,6 +22,17 @@ int locals_var_size(LVar *loc) {
         return 0;
 }
 
+long long int str_to_int(char *str) {
+    long long int res = 0;
+    long long int sixteen = 1;
+    for (int i = 0; *str; i++) {
+        res += (long long int)(*str) * sixteen;
+        sixteen *= 16*16;
+        str++;
+    }
+    return res;
+}
+
 // gen_stmt(node->stmt)後にスタックにraxがpushされる
 // gen_stmt(node->stmt)後にmainに戻らない場合に使用
 void gen_pop(Node *node) {
@@ -77,7 +88,7 @@ void gen_addr(Node *node) {
             break;
         case ND_LVAR:
             if (node->lvar->glb_var)
-                printf("  lea rax, %s[rip]\n", node->lvar->name);
+                printf("  lea rax, .%s[rip]\n", node->lvar->name);
             else {
                 printf("  mov rax, rbp\n");
                 printf("  sub rax, %d\n", node->offset);
@@ -204,12 +215,16 @@ void gen_stmt(Node *node) {
             printf("  push %d\n", node->val);
             return;
         case ND_STR:
+            printf("  mov rax, %lld\n", str_to_int(node->lvar->str));
+            printf("  push rax\n");
+            return;
+        case ND_STR_PTR:
             printf("  lea rax, .STR%d[rip]\n", node->lvar->offset);
             printf("  push rax\n");
             return;
         case ND_LVAR: // 変数
             if (node->lvar->glb_var) 
-                printf("  lea rax, %s[rip]\n", node->lvar->name);
+                printf("  lea rax, .%s[rip]\n", node->lvar->name);
             else {
                 printf("  mov rax, rbp\n");
                 printf("  sub rax, %d\n", node->offset);
@@ -319,14 +334,83 @@ void gen_func(Func *func) {
     printf("  ret\n");
 }
 
+// ----------------- グローバル変数 --------------------- //
+
+// グローバル変数の初期化
+void gen_initialize_global_var(Node *node) {
+    switch (node->kind) {
+        case ND_ADD:
+            gen_initialize_global_var(node->lhs);
+            printf(" + ");
+            gen_initialize_global_var(node->rhs);
+            return;
+        case ND_SUB:
+            gen_initialize_global_var(node->lhs);
+            printf(" - ");
+            gen_initialize_global_var(node->rhs);
+            return;
+        case ND_MUL:
+            gen_initialize_global_var(node->lhs);
+            printf(" * ");
+            gen_initialize_global_var(node->rhs);
+            return;
+        case ND_DIV:
+            gen_initialize_global_var(node->lhs);
+            printf(" / ");
+            gen_initialize_global_var(node->rhs);
+            return;
+        case ND_NUM:
+            printf("%d", node->val);
+            return;
+        case ND_ADDR:
+            printf(".%s", node->lhs->lvar->name);
+            return;
+        default:
+            error("グローバル変数の初期化は配列.文字リテラル.和.差.積.商.数字.アドレスである必要があります");
+    }
+}
+
+// 1つのグローバル変数の初期化
+void gen_initialize_data(LVar *glb_var) {
+    if (!glb_var->initial)
+        printf("  .zero %d\n", get_size(glb_var->type));
+    else {
+        for (Node *glb_ini = glb_var->initial; glb_ini; glb_ini = glb_ini->next_stmt) {
+            if (glb_ini->rhs->kind == ND_STR) {
+                printf("  .string \"%s\"\n", glb_ini->rhs->lvar->str);
+            } else {
+                // var(lhs) = assign(rhs)
+                switch (get_size(AST_type(glb_ini->rhs))) {
+                    case 1:
+                        printf("  .byte ");
+                        break;
+                    case 4:
+                        printf("  .long ");
+                        break;
+                    case 8:
+                        printf("  .quad ");
+                        break;
+                    default:
+                        error("グローバル変数の初期化時のサイズが処理できません");
+                }
+                gen_initialize_global_var(glb_ini->rhs);
+                printf("\n");
+            }
+        }
+    }
+}
+
 // グローバル変数
 void gen_global_var() {
     LVar *glb_var;
     printf(".data\n");
+
     for (glb_var = global_var; glb_var; glb_var = glb_var->next) {
-        printf("%s:\n", glb_var->name);
-        printf("  .zero %d\n", get_size(glb_var->type));
+        printf(".%s:\n", glb_var->name);
+        gen_initialize_data(glb_var);
     }
+
+    printf("\n");
 
     for (glb_var = strs; glb_var; glb_var = glb_var->next) {
         printf(".STR%d:\n", glb_var->offset);

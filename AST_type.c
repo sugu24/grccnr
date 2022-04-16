@@ -90,16 +90,15 @@ VarType *AST_type(Node *node) {
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
-            /*
-            if (node->val < (1 << 8))
-                var_type->ty = CHAR;
-            else if ((long int)node->val < ((long int)1 << 32))
-                var_type->ty = INT;
-            else
-                error_at(token->str, "数字が4バイトより大きいため処理できません");
-            */
             return var_type;
         case ND_STR:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = ARRAY;
+            var_type->array_size = node->lvar->len;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = CHAR;
+            return var_type;
+        case ND_STR_PTR:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = PTR;
             var_type->ptr_to = calloc(1, sizeof(VarType));
@@ -147,11 +146,10 @@ VarType *AST_type(Node *node) {
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
             lsize = get_size(lhs_var_type);
             rsize = get_size(rhs_var_type);
-            if (lsize > 8 || rsize > 8)
+            if (lsize > 9 || (lsize < 8 && rsize >= 8))
                 error_at(token->str, "右辺と左辺の型が一致しません");
             return rhs_var_type;
         case ND_LVAR:
-            //printf("# type->ptrs=%d, type->array_size=%d\n", var_type->ptrs, var_type->array_size);
             return node->lvar->type;
         case ND_RETURN:
             lhs_var_type = AST_type(node->lhs);

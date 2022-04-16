@@ -24,7 +24,7 @@ void error_at(char *loc, char *fmt, ...) {
     char *line = loc;
     while (user_input < line && line[-1] != '\n')
         line--;
-    
+
     char *end = loc;
     while (*end != '\n')
         end++;
@@ -35,7 +35,7 @@ void error_at(char *loc, char *fmt, ...) {
         if (*p == '\n')
             line_num++;
     }
-
+    
     // 見つかった行をファイル名と行番号と一緒に表示
     int indent = fprintf(stderr, "%s:%d:", filename, line_num);
     fprintf(stderr, "%.*s\n", (int)(end - line), line);
@@ -84,6 +84,7 @@ int main(int argc, char** argv){
 	// トークナイズしてパースする
     filename = argv[1];
 	user_input = read_file(filename);
+    //user_input = argv[1];
     token = tokenize();
 	program();
     

@@ -1,0 +1,14 @@
+int foo() {
+  return 6;
+}
+
+int main() {
+  int bd;
+  int a = 1 + 1;
+  int *b = &a;
+  int fff;
+  int f = foo();
+  printf("a=2->%d, *b=2->%d, f=6->%d\n", a, *b, f);
+  printf("%d\n", sizeof("aaa"));
+  return a;
+}
