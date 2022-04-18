@@ -80,6 +80,7 @@ typedef enum {
     ND_CALL_FUNC, // 20 関数呼び出し
     ND_STR_PTR, // 21 文字列のポインタ
     ND_STR,     // 22 文字リテラル
+    ND_CHAR,    // 23 1文字
 } NodeKind;
 
 // 変数の型
@@ -98,7 +99,6 @@ struct Node {
     int offset;    // kindがND_LVAR, ND_ELSE_IF,ND_DEREFの場合に使う
     int control;   // kindが制御構文の場合のみ使う(ラベル番号)
     char *func_name; // kindがND_CALL_FUNCの場合のみ使う
-    //char *str;     // 文字リテラル
     int array_accessing;   // 配列でmov rax, [rax]しない場合に使う
     Node *arg[7];  // kindがND_CALL_FUNCの場合のみ使う
     LVar *lvar;     // 変数の場合
@@ -182,3 +182,4 @@ void gen_global_var();
 // ---------- 構文木の型を調査 ---------- //
 VarType *AST_type(Node *node);
 int get_size(VarType *type);
+VarType *get_type(VarType *type);

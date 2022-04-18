@@ -1,13 +1,17 @@
+char a[5] = "bbbb";
+char aa[] = "bbb";
 int main() {
-  char *s = "aaa";
-  printf("%s\n", s);
-  //char s[5] = "abcd";
-  //printf("s=abcd->%s\n", s);
-  //char ss[] = "efgh";
-  //printf("ss=efgh->%s\n", ss);
-  //s[0] = 100;
-  //ss[0] = 100;
-  //printf("s=dbcd->%s ss=dfgh->%s\n", s, ss);
-  //char *sss = &s;
-  //printf("*sss=dbcd->%s\n", sss);
+  char *sa = "aaa";
+  printf("%s\n", sa);
+  int b = 1;
+  printf("b=1->%d\n", b);
+  char s[5] = "abcd";
+  printf("s=abcd->%s\n", s);
+  char ss[] = "fgh";
+  printf("ss=efgh->%s\n", ss);
+  s[0] = 100;
+  ss[0] = 100;
+  printf("s=dbcd->%s ss=dfgh->%s\n", s, ss);
+  char *sss = &s;
+  printf("*sss=dbcd->%s\n", sss);
 }

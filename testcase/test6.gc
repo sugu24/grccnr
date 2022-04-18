@@ -9,6 +9,6 @@ int main() {
   int fff;
   int f = foo();
   printf("a=2->%d, *b=2->%d, f=6->%d\n", a, *b, f);
-  printf("%d\n", sizeof("aaa"));
-  return a;
+  printf("sizeof(aaa)=3->%d\n", sizeof("aaa"));
+  return 0;
 }

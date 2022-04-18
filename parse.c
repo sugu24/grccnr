@@ -28,6 +28,12 @@ Node *new_num(int val) {
 	return node;
 }
 
+Node *new_char(char c) {
+    Node *node = new_node(ND_CHAR);
+    node->val = (int)c;
+    return node;
+}
+
 // 変数を名前で検索する　見つからないならNULLを返す
 LVar *find_lvar(Token *tok) {
     // ローカル変数
@@ -185,34 +191,101 @@ VarType *new_var_type() {
     return top_var_type;
 }
 
-// 初期値
-LVar *initialize(LVar *lvar) {
-    if (token_str("{")) {
+// Node *array_initialize(VarType *type, int add)
+// { : array_initialize(type->ptr_to, 0)
+// } : return node
+// 数字 : node->next_stmt = initialize
+Node *array_initialize(VarType *type) {
+    return NULL;
+}
+
+// グローバル変数の文字列初期化
+Node *init_local_string(Token *tok, VarType *var_type) {
+    Node *head_node = new_node(ND_BLOCK);
+    Node *cur_node = head_node;
+    Node *next_node, *next_cand_stmt;
+    cur_node->next_stmt = NULL;
+    int i;
+    for (i = 0; tok->str[i]; i++) {
+        next_cand_stmt = calloc(1, sizeof(Node));
+        next_cand_stmt = new_binary(ND_ASSIGN,
+            new_binary(ND_DEREF, 
+                new_binary(ND_ADD, new_node(ND_LVAR), new_num(i)), 
+                NULL), 
+            new_char(tok->str[i]));
+        next_node = calloc(1, sizeof(Node));
+        next_node->stmt = next_cand_stmt;
+        cur_node->next_stmt = next_node;
+        cur_node = cur_node->next_stmt;
+        cur_node->next_stmt = NULL;
+    }
+
+    // 終端文字
+    next_cand_stmt = calloc(1, sizeof(Node));
+        next_cand_stmt = new_binary(ND_ASSIGN,
+        new_binary(ND_DEREF, 
+            new_binary(ND_ADD, new_node(ND_LVAR), new_num(i)), 
+            NULL), 
+        new_char('\0'));
+    next_node = calloc(1, sizeof(Node));
+    next_node->stmt = next_cand_stmt;
+    cur_node->next_stmt = next_node;
+    cur_node = cur_node->next_stmt;
+    cur_node->next_stmt = NULL;
+
+    if (!var_type->array_size)
+        var_type->array_size = i+1;
+
+    return head_node;
+}
+
+Node *init_glb_string(Token *tok, VarType *var_type) {
+    Node *node_str = new_node(ND_STR);
+    LVar *lstr = calloc(1, sizeof(LVar));
+    lstr->str = tok->str;
+    lstr->len = tok->len;
+    node_str->lvar = lstr;
+
+    if (!var_type->array_size)
+        var_type->array_size = tok->len + 1;
+
+    return new_binary(ND_ASSIGN,
+           new_node(ND_LVAR), 
+           node_str);
+}
+
+//  宣言したlvarのlvar->initialに初期値を設定して返す
+// lvar->initial = new_binary(ND_ADDIGN, lnode, 初期値)
+// lnodeにrbpからのoffsetは未設定
+// lnodes:代入先
+Node *initialize(int type, VarType *var_type) {
+    Node *init_node, *cur_node, *before_node;
+    if (consume("{")) {
         // 配列の初期化
-    } else if (lvar->type->ty == ARRAY && 
-               lvar->type->ptr_to->ty == CHAR && 
+        Node *node = array_initialize(var_type);
+        expect("}");
+        return node;
+    } else if (var_type->ty == ARRAY &&
+               var_type->ptr_to->ty == CHAR &&
                token_kind(TK_STR)) {
         // ポインタ型か配列のstr
+        // 文字列取得
         Token *tok = consume_kind(TK_STR);
+        if (!tok)
+            error_at(token->str, "文字列である必要があります");
+        
         tok->str = str_copy(tok);
-        Node *node = new_node(ND_LVAR);
-        Node *node_str = new_node(ND_STR);
-        LVar *lstr = calloc(1, sizeof(LVar));
-        lstr->str = tok->str;
-        lstr->len = tok->len;
-        node_str->lvar = lstr;
-        node->lvar = lvar;
-        lvar->initial = new_binary(ND_ASSIGN, node, node_str);
-        // []の場合はsizeにlenを代入
-        if (lvar->type->array_size == 0)
-            lvar->type->array_size = tok->len+1;
+        
+        if (type == 2) 
+            return init_glb_string(tok, var_type);
+        else 
+            return init_local_string(tok, var_type);
     } else {
         // 定数 アドレス 文字リテラル など
-        Node *node = new_node(ND_LVAR);
-        node->lvar = lvar;
-        lvar->initial = new_binary(ND_ASSIGN, node, expr());
+        return new_binary(ND_ASSIGN, 
+               new_node(ND_LVAR), 
+               expr());
     }
-    return lvar;
 }
 
 // 変数の宣言 失敗なら途中でexitされる
@@ -258,7 +331,8 @@ LVar *declare_var(int type) {
                 array_now->array_size = expect_number();
                 if (array_now->array_size <= 0)
                     error_at(token->str, "配列のサイズは正の整数である必要があります");
-            }
+            } else if (array_bfr != array_top)
+                error_at(token->str, "配列の要素数省略は最高次元の場合のみ可です");
             array_bfr = array_now;
             expect("]");
         }
@@ -267,9 +341,9 @@ LVar *declare_var(int type) {
     }
 
     // 初期化ありローカル変数かグローバル変数
-    if (type > 0 && consume("="))
-        lvar = initialize(lvar);
-
+    if (type > 0 && consume("=")) 
+        lvar->initial = initialize(type, lvar->type);
+    
     int offset = get_size(lvar->type);
     // RBPからのオフセット
     // type==2はグローバル変数
@@ -280,15 +354,26 @@ LVar *declare_var(int type) {
     else
         lvar->offset = offset;
 
-    // 宣言された変数のoffsetを設定する
-    for (Node *init = lvar->initial; init; init = init->next_stmt)
-        init->lhs->offset = lvar->offset;
-    
+    // 宣言された変数を初期化のlhs->lvarに設定
+    for (Node *init = lvar->initial; init; init = init->next_stmt) {
+        if (init->kind == ND_BLOCK) {}
+        else if (init->stmt) {
+            init->stmt->lhs->lhs->lhs->lvar = lvar;
+            init->stmt->lhs->lhs->lhs->offset = lvar->offset;
+            AST_type(init->stmt);
+        }
+        else if (init->lhs->kind == ND_LVAR) {
+            init->lhs->lvar = lvar;
+            init->lhs->offset = lvar->offset;
+            AST_type(init);
+        }
+    }
+
     // 変数宣言終了
     if (type == 0 || token_str(";"))
         return lvar;
-    else
-        error_at(token->str, "文の末尾は ; である必要があります");
+
+    error_at(token->str, "文の末尾は ; である必要があります");
 }
 
 // ---------- parser ---------- //
@@ -326,7 +411,7 @@ Func *glbstmt() {
                 arg_var = declare_var(0);
                 arg_var->next = locals;
                 locals = arg_var;
-            } 
+            }
             if (consume(",")) continue;
             else if (consume(")")) break;
             else error_at(token->str, "','か')'である必要があります");

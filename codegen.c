@@ -22,17 +22,6 @@ int locals_var_size(LVar *loc) {
         return 0;
 }
 
-long long int str_to_int(char *str) {
-    long long int res = 0;
-    long long int sixteen = 1;
-    for (int i = 0; *str; i++) {
-        res += (long long int)(*str) * sixteen;
-        sixteen *= 16*16;
-        str++;
-    }
-    return res;
-}
-
 // gen_stmt(node->stmt)後にスタックにraxがpushされる
 // gen_stmt(node->stmt)後にmainに戻らない場合に使用
 void gen_pop(Node *node) {
@@ -214,8 +203,8 @@ void gen_stmt(Node *node) {
         case ND_NUM:
             printf("  push %d\n", node->val);
             return;
-        case ND_STR:
-            printf("  mov rax, %lld\n", str_to_int(node->lvar->str));
+        case ND_CHAR:
+            printf("  mov rax, %d\n", (int)node->val);
             printf("  push rax\n");
             return;
         case ND_STR_PTR:
@@ -231,7 +220,7 @@ void gen_stmt(Node *node) {
             }
             
             // 配列でないならデータをraxへ
-            if (!(node->lvar->type->ty == ARRAY))
+            if (node->lvar->type->ty != ARRAY)
                 mov_rax_data(node);
             printf("  push rax\n");
             return;
@@ -240,7 +229,7 @@ void gen_stmt(Node *node) {
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
-            if (node->array_accessing == 0) {
+            if (!node->array_accessing) {
                 printf("  pop rax\n");
                 mov_rax_data(node);
                 printf("  push rax\n");
@@ -372,30 +361,36 @@ void gen_initialize_global_var(Node *node) {
 
 // 1つのグローバル変数の初期化
 void gen_initialize_data(LVar *glb_var) {
-    if (!glb_var->initial)
+    if (!glb_var->initial) {
         printf("  .zero %d\n", get_size(glb_var->type));
-    else {
-        for (Node *glb_ini = glb_var->initial; glb_ini; glb_ini = glb_ini->next_stmt) {
-            if (glb_ini->rhs->kind == ND_STR) {
-                printf("  .string \"%s\"\n", glb_ini->rhs->lvar->str);
-            } else {
-                // var(lhs) = assign(rhs)
-                switch (get_size(AST_type(glb_ini->rhs))) {
-                    case 1:
-                        printf("  .byte ");
-                        break;
-                    case 4:
-                        printf("  .long ");
-                        break;
-                    case 8:
-                        printf("  .quad ");
-                        break;
-                    default:
-                        error("グローバル変数の初期化時のサイズが処理できません");
-                }
-                gen_initialize_global_var(glb_ini->rhs);
-                printf("\n");
+    }
+
+    // 配列などのオフセット
+    int offset = 0;
+    int size = get_size(get_type(glb_var->type));
+    for (Node *glb_ini = glb_var->initial; glb_ini; glb_ini = glb_ini->next_stmt) {
+        // ゼロ埋め
+        // if (glb_ini->lvar-> offset + size )
+
+        if (glb_ini->rhs->kind == ND_STR) {
+            printf("  .string \"%s\"\n", glb_ini->rhs->lvar->str);
+        } else {
+            // var(lhs) = assign(rhs)
+            switch (get_size(AST_type(glb_ini->rhs))) {
+                case 1:
+                    printf("  .byte ");
+                    break;
+                case 4:
+                    printf("  .long ");
+                    break;
+                case 8:
+                    printf("  .quad ");
+                    break;
+                default:
+                    error("グローバル変数の初期化時のサイズが処理できません");
             }
+            gen_initialize_global_var(glb_ini->rhs);
+            printf("\n");
         }
     }
 }

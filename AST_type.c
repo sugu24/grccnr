@@ -62,8 +62,15 @@ int get_size(VarType *type) {
     }
 }
 
+// VarTypeが配列抜きで何の型を格納しているか返す
+VarType *get_type(VarType *type) {
+    while (type->ty == ARRAY) type = type->ptr_to;
+    return type;
+}
+
 // 戻り値 Type:(int,ptr) ptrs:ptr?
 VarType *AST_type(Node *node) {
+    //printf("%d\n", node->kind);
     VarType *lhs_var_type, *rhs_var_type;
     VarType *var_type; // 整数や比較演算の場合に使う
     int lsize, rsize;
@@ -71,9 +78,6 @@ VarType *AST_type(Node *node) {
         case ND_ADD:
             lhs_var_type = AST_type(node->lhs);
             rhs_var_type = AST_type(node->rhs);
-            //printf("#lhs_ptr=%d, lhs_arsz=%d, rhs_ptr=%d, rhs_arsz=%d\n",
-            //    lhs_var_type->ptrs, lhs_var_type->array_size,
-            //    rhs_var_type->ptrs, rhs_var_type->array_size);
             break;
         case ND_SUB:
             lhs_var_type = AST_type(node->lhs);
@@ -90,6 +94,10 @@ VarType *AST_type(Node *node) {
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
+            return var_type;
+        case ND_CHAR:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = CHAR;
             return var_type;
         case ND_STR:
             var_type = calloc(1, sizeof(VarType));
@@ -144,10 +152,8 @@ VarType *AST_type(Node *node) {
             lhs_var_type = AST_type(node->lhs);
             rhs_var_type = AST_type(node->rhs);
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
-            lsize = get_size(lhs_var_type);
-            rsize = get_size(rhs_var_type);
-            if (lsize > 9 || (lsize < 8 && rsize >= 8))
-                error_at(token->str, "右辺と左辺の型が一致しません");
+            //lsize = get_size(lhs_var_type);
+            //rsize = get_size(rhs_var_type);
             return rhs_var_type;
         case ND_LVAR:
             return node->lvar->type;
@@ -192,7 +198,6 @@ VarType *AST_type(Node *node) {
         node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         return rhs_var_type;
     }
-
     // ポインタとポインタ(アドレスとアドレス)の演算
     // lhsにrhsを足すイメージでlhs_var_typeを返す
     return lhs_var_type;
