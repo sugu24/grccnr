@@ -17,6 +17,7 @@ assert(){
 	fi
 }
 
+#assert 0 testcase/test9.gc
 #assert 2 testcase/test8.gc
 #assert 0 testcase/test7.gc
 #assert 0 testcase/test6.gc

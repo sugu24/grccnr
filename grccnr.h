@@ -17,13 +17,15 @@ typedef struct Func Func;
 typedef struct LVar LVar;
 typedef struct VarType VarType;
 
+typedef struct Typedef Typedef;
 // ---------- global var ---------- //
-extern char *user_input; // 入力プログラム
-extern Token *token; // 現在着目しているトークン
+extern char *user_input;    // 入力プログラム
+extern Token *token;        // 現在着目しているトークン
 extern Func *code[1024];
-extern LVar *locals; // 変数名の連結リスト
-extern LVar *global_var; // グローバル変数
-extern LVar *strs;
+extern LVar *locals;        // 変数名の連結リスト
+extern LVar *global_var;    // グローバル変数
+extern LVar *strs;          // 文字リテラル
+extern Typedef *typedefs;   // typedefの連結リスト
 extern LVar *func_locals[1024]; // 関数内のローカル変数
 extern char *arg_register[6][4]; // 引数を記憶するレジスタ
 
@@ -40,9 +42,11 @@ typedef enum {
     TK_ELSE,     // else
     TK_WHILE,    // while
     TK_FOR,      // for
-    TK_VAR_TYPE, // int
+    TK_INT,      // int
+    TK_CHAR,     // char
     TK_SIZEOF,   // sizeof
     TK_STR,      // 文字列
+    TK_TYPEDEF,  // typedef
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -84,7 +88,7 @@ typedef enum {
 } NodeKind;
 
 // 変数の型
-typedef enum { INT = 1, CHAR, PTR, ARRAY } Type;
+typedef enum { INT = 1, CHAR, PTR, ARRAY, STRUCT } Type;
 
 // 抽象構文木のノード型
 struct Node {
@@ -109,6 +113,8 @@ struct VarType {
     Type ty;
     VarType *ptr_to;
     size_t array_size;
+    int typedef_type;
+    char *struct_name;
 };
 
 // 変数の型
@@ -129,6 +135,14 @@ struct Func {
     LVar *arg;
     LVar *locals;
     Node *stmt;
+};
+
+// typedefの型
+struct Typedef {
+    Typedef *next;     // 次のTypedef
+    VarType *type;     // INT, CHARなど
+    char *name; // 宣言する名前
+    int len;           // len(define_name)
 };
 
 // ---------- error ---------- //

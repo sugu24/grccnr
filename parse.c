@@ -5,6 +5,7 @@ LVar *locals;
 LVar *global_var;
 LVar *strs;
 Func *now_func;
+Typedef *typedefs;
 
 int control = 0;
 int str_num = 0;
@@ -34,22 +35,46 @@ Node *new_char(char c) {
     return node;
 }
 
+Typedef *new_typedef(VarType *type, char *name, int len) {
+    Typedef *type_def = calloc(1, sizeof(Typedef));
+    type_def->type = type;
+    type_def->name = name;
+    type_def->len = len;
+    return type_def;
+}
+
 // 変数を名前で検索する　見つからないならNULLを返す
 LVar *find_lvar(Token *tok) {
     // ローカル変数
     for (LVar *var = locals; var; var = var->next) {
-        if (var->len == tok->len && 
+        if (tok->len == var->len && 
             !memcmp(tok->str, var->name, var->len))
             return var;
     }
 
     // グローバル変数
     for (LVar *var = global_var; var; var = var->next) {
-        if (var->len == tok->len && 
+        if (tok->len == var->len && 
             !memcmp(tok->str, var->name, var->len)) {
             return var;
         }
     }
+    return NULL;
+}
+
+// typedef宣言された型名と一致する物があれば返す
+VarType *get_typedefed_type() {
+    Token *tok = consume_kind(TK_IDENT);
+    if (!tok)
+        return NULL;
+    
+    for (Typedef *type_def = typedefs; type_def; type_def = type_def->next) {
+        if (tok->len == type_def->len &&
+            !memcmp(tok->str, type_def->name, tok->len))
+            return type_def->type;
+    }
+
+    token = tok;
     return NULL;
 }
 
@@ -166,28 +191,63 @@ char *str_copy(Token *tok) {
     return temp;
 }
 
+// 宣言系のexprであるか
+int is_var_type() {
+    if (token_kind(TK_INT))
+        return 1;
+    else if (token_kind(TK_CHAR))
+        return 1;
+    else if (token->kind == TK_IDENT){
+        for (Typedef *type_def = typedefs; type_def; type_def = type_def->next) {
+            if (token->len == type_def->len &&
+                !memcmp(token->str, type_def->name, token->len))
+                return 1;
+        }
+    }
+    return 0;
+}
+
+Type get_var_type() {
+    if (consume_kind(TK_INT))
+        return INT;
+    else if (consume_kind(TK_CHAR))
+        return CHAR;
+    else 
+        return 0;
+}
+
 // 変数の型を返す
 VarType *new_var_type() {
-    VarType *var_type, *next_var_type, *top_var_type;
+    VarType *var_type, *temp_type, *top_var_type;
     Type type;
     top_var_type = var_type = calloc(1, sizeof(VarType));
-    Token *tok = consume_kind(TK_VAR_TYPE);
-    if (!tok) return NULL;
 
-    if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "int", tok->len) == 0)
-        type = INT;
-    else if (tok->kind == TK_VAR_TYPE && strncmp(tok->str, "char", tok->len) == 0)
-        type = CHAR;
-    else
-        error_at(tok->str, "未定義の型です");
-    
-    while (consume("*")) {
-        next_var_type = calloc(1, sizeof(VarType));
-        var_type->ty = PTR;
-        var_type->ptr_to = next_var_type;
-        var_type = next_var_type;
+    // 型取得
+    while (true) {
+        if (consume_kind(TK_TYPEDEF))
+            var_type->typedef_type = 1;
+        else if (type = get_var_type()) {
+            if (var_type->ty)
+                error_at(token->str, "型は一意に定めなければいけません");
+            var_type->ty = type;
+        } else if (temp_type = get_typedefed_type()) {
+            if (temp_type->ty == STRUCT) 
+                var_type->struct_name = temp_type->struct_name;
+            var_type->ty = temp_type->ty;
+        } else
+            break;
     }
-    var_type->ty = type;
+    if (!var_type->ty)
+        return NULL;
+
+    // ポインタ取得
+    while (consume("*")) {
+        top_var_type = calloc(1, sizeof(VarType));
+        top_var_type->ty = PTR;
+        top_var_type->ptr_to = var_type;
+        var_type = top_var_type;
+    }
+
     return top_var_type;
 }
 
@@ -200,7 +260,7 @@ LVar *declare_var(int type) {
 
     // 変数の型
     lvar->type = new_var_type();
-    if (!lvar)
+    if (!lvar->type)
         return NULL;
     
     // 変数名
@@ -225,6 +285,9 @@ LVar *declare_var(int type) {
 
     // []?
     if (token_str("[")) {
+        if (lvar->type->typedef_type)
+            error_at(token->str, "typedef宣言では [ は処理できません");
+
         array_top = array_bfr = calloc(1, sizeof(VarType));
         while (consume("[")) {
             array_now = calloc(1, sizeof(VarType));
@@ -249,7 +312,7 @@ LVar *declare_var(int type) {
     
     if (type > 0 && consume("="))
         lvar->initial = initialize(type, lvar->type, lvar_node);
-    
+
     int offset = get_size(lvar->type);
 
     // RBPからのオフセット
@@ -264,8 +327,18 @@ LVar *declare_var(int type) {
     lvar_node->lvar = lvar;
     lvar_node->offset = lvar->offset;
 
+    // typedef宣言ならtypdefefsにlvarとtypedef名を加える
+    if (lvar->type->typedef_type) {
+        if (lvar->initial)
+            error_at(token->str, "typedef宣言で新しく宣言された型に対して初期化出来ません");
+        
+        Typedef *type_def = new_typedef(lvar->type, lvar->name, lvar->len);
+        type_def->next = typedefs;
+        typedefs = type_def;
+        return NULL;
+    } 
     // 変数宣言終了
-    if (type == 0 || token_str(";"))
+    else if (type == 0 || token_str(";"))
         return lvar;
 
     error_at(token->str, "文の末尾は ; である必要があります");
@@ -286,8 +359,14 @@ Func *glbstmt() {
     Func *func; // 関数の場合に仕様
     LVar *var_or_func, *arg_var;
     var_or_func = declare_var(2);
+    
+    // typedef宣言の場合Funcは返さない
+    if (!var_or_func) {
+        expect(";");
+        return NULL;
+    }
     // 関数
-    if (consume("(")) {
+    else if (consume("(")) {
         if (var_or_func->initial)
             error_at(token->str, "変数の初期化後に ( は未定義です");
         func = calloc(1, sizeof(Func));
@@ -302,7 +381,7 @@ Func *glbstmt() {
             if (i == 6)
                 error_at(token->str, "引数が7つ以上に対応していません");
             
-            if (token_kind(TK_VAR_TYPE)) { 
+            if (is_var_type()) {
                 arg_var = declare_var(0);
                 arg_var->next = locals;
                 locals = arg_var;
@@ -325,6 +404,7 @@ Func *glbstmt() {
 
         return NULL;
     }
+    return NULL;
 }
 
 /* 
@@ -338,16 +418,22 @@ Node *stmt() {
     Node *node;
     LVar *lvar;
 
-    // 変数宣言
-    while (token_kind(TK_VAR_TYPE)) {
-        lvar = declare_var(1);
-        lvar->next = locals;
-        locals = lvar;
-        expect(";");
-        if (lvar->initial) 
-            return lvar->initial;
-        else 
+    // 変数宣言またはtypedef宣言
+    while (is_var_type() || token_kind(TK_TYPEDEF)) {
+        if (token_kind(TK_TYPEDEF)) {
+            declare_var(1);
+            expect(";");
             return NULL;
+        } else {
+            lvar = declare_var(1);
+            lvar->next = locals;
+            locals = lvar;
+            expect(";");
+            if (lvar->initial)
+                return lvar->initial;
+            else 
+                return NULL;
+        }
     }
 
     if (consume("{")) { // block文

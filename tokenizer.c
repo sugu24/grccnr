@@ -159,21 +159,23 @@ Token *tokenize() {
         // トークンが数字以外なら文字列の長さを取得して予約語か変数か判定
         if (len = token_len(p)) {
             if (len == 6 && strncmp(p, "return", len) == 0)
-                cur = new_token(TK_RETURN, cur, p, 6);
+                cur = new_token(TK_RETURN, cur, p, len);
             else if (len == 2 && strncmp(p, "if", len) == 0)
-                cur = new_token(TK_IF, cur, p, 2);
+                cur = new_token(TK_IF, cur, p, len);
             else if (len == 4 && strncmp(p, "else", len) == 0)
-                cur = new_token(TK_ELSE, cur, p, 4);
+                cur = new_token(TK_ELSE, cur, p, len);
             else if (len == 5 && strncmp(p, "while", len) == 0)
-                cur = new_token(TK_WHILE, cur, p, 5);
+                cur = new_token(TK_WHILE, cur, p, len);
             else if (len == 3 && strncmp(p, "for", len) == 0)
-                cur = new_token(TK_FOR, cur, p, 3);
+                cur = new_token(TK_FOR, cur, p, len);
             else if (len == 3 && strncmp(p, "int", len) == 0)
-                cur = new_token(TK_VAR_TYPE, cur, p, 3);
+                cur = new_token(TK_INT, cur, p, len);
             else if (len == 4 && strncmp(p, "char", len) == 0)
-                cur = new_token(TK_VAR_TYPE, cur, p, 4);
+                cur = new_token(TK_CHAR, cur, p, len);
             else if (len == 6 && strncmp(p, "sizeof", len) == 0)
-                cur = new_token(TK_SIZEOF, cur, p, 6);
+                cur = new_token(TK_SIZEOF, cur, p, len);
+            else if (len == 7 && strncmp(p, "typedef", len) == 0)
+                cur = new_token(TK_TYPEDEF, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;
