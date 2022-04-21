@@ -191,103 +191,6 @@ VarType *new_var_type() {
     return top_var_type;
 }
 
-// Node *array_initialize(VarType *type, int add)
-// { : array_initialize(type->ptr_to, 0)
-// } : return node
-// 数字 : node->next_stmt = initialize
-Node *array_initialize(VarType *type) {
-    return NULL;
-}
-
-// グローバル変数の文字列初期化
-Node *init_local_string(Token *tok, VarType *var_type) {
-    Node *head_node = new_node(ND_BLOCK);
-    Node *cur_node = head_node;
-    Node *next_node, *next_cand_stmt;
-    cur_node->next_stmt = NULL;
-    int i;
-    for (i = 0; tok->str[i]; i++) {
-        next_cand_stmt = calloc(1, sizeof(Node));
-        next_cand_stmt = new_binary(ND_ASSIGN,
-            new_binary(ND_DEREF, 
-                new_binary(ND_ADD, new_node(ND_LVAR), new_num(i)), 
-                NULL), 
-            new_char(tok->str[i]));
-        next_node = calloc(1, sizeof(Node));
-        next_node->stmt = next_cand_stmt;
-        cur_node->next_stmt = next_node;
-        cur_node = cur_node->next_stmt;
-        cur_node->next_stmt = NULL;
-    }
-
-    // 終端文字
-    next_cand_stmt = calloc(1, sizeof(Node));
-        next_cand_stmt = new_binary(ND_ASSIGN,
-        new_binary(ND_DEREF, 
-            new_binary(ND_ADD, new_node(ND_LVAR), new_num(i)), 
-            NULL), 
-        new_char('\0'));
-    next_node = calloc(1, sizeof(Node));
-    next_node->stmt = next_cand_stmt;
-    cur_node->next_stmt = next_node;
-    cur_node = cur_node->next_stmt;
-    cur_node->next_stmt = NULL;
-
-    if (!var_type->array_size)
-        var_type->array_size = i+1;
-
-    return head_node;
-}
-
-Node *init_glb_string(Token *tok, VarType *var_type) {
-    Node *node_str = new_node(ND_STR);
-    LVar *lstr = calloc(1, sizeof(LVar));
-    lstr->str = tok->str;
-    lstr->len = tok->len;
-    node_str->lvar = lstr;
-
-    if (!var_type->array_size)
-        var_type->array_size = tok->len + 1;
-
-    return new_binary(ND_ASSIGN,
-           new_node(ND_LVAR), 
-           node_str);
-}
-
-//  宣言したlvarのlvar->initialに初期値を設定して返す
-// lvar->initial = new_binary(ND_ADDIGN, lnode, 初期値)
-// lnodeにrbpからのoffsetは未設定
-// lnodes:代入先
-Node *initialize(int type, VarType *var_type) {
-    Node *init_node, *cur_node, *before_node;
-    if (consume("{")) {
-        // 配列の初期化
-        Node *node = array_initialize(var_type);
-        expect("}");
-        return node;
-    } else if (var_type->ty == ARRAY &&
-               var_type->ptr_to->ty == CHAR &&
-               token_kind(TK_STR)) {
-        // ポインタ型か配列のstr
-        // 文字列取得
-        Token *tok = consume_kind(TK_STR);
-        if (!tok)
-            error_at(token->str, "文字列である必要があります");
-        
-        tok->str = str_copy(tok);
-        
-        if (type == 2) 
-            return init_glb_string(tok, var_type);
-        else 
-            return init_local_string(tok, var_type);
-    } else {
-        // 定数 アドレス 文字リテラル など
-        return new_binary(ND_ASSIGN, 
-               new_node(ND_LVAR), 
-               expr());
-    }
-}
-
 // 変数の宣言 失敗なら途中でexitされる
 // type: 0->arg 1->locals 2->global
 LVar *declare_var(int type) {
@@ -341,10 +244,14 @@ LVar *declare_var(int type) {
     }
 
     // 初期化ありローカル変数かグローバル変数
-    if (type > 0 && consume("=")) 
-        lvar->initial = initialize(type, lvar->type);
+    Node *lvar_node = new_node(ND_LVAR);
+    lvar_node->lvar = lvar;
+    
+    if (type > 0 && consume("="))
+        lvar->initial = initialize(type, lvar->type, lvar_node);
     
     int offset = get_size(lvar->type);
+
     // RBPからのオフセット
     // type==2はグローバル変数
     if (type == 2)
@@ -354,20 +261,8 @@ LVar *declare_var(int type) {
     else
         lvar->offset = offset;
 
-    // 宣言された変数を初期化のlhs->lvarに設定
-    for (Node *init = lvar->initial; init; init = init->next_stmt) {
-        if (init->kind == ND_BLOCK) {}
-        else if (init->stmt) {
-            init->stmt->lhs->lhs->lhs->lvar = lvar;
-            init->stmt->lhs->lhs->lhs->offset = lvar->offset;
-            AST_type(init->stmt);
-        }
-        else if (init->lhs->kind == ND_LVAR) {
-            init->lhs->lvar = lvar;
-            init->lhs->offset = lvar->offset;
-            AST_type(init);
-        }
-    }
+    lvar_node->lvar = lvar;
+    lvar_node->offset = lvar->offset;
 
     // 変数宣言終了
     if (type == 0 || token_str(";"))
@@ -481,7 +376,7 @@ Node *stmt() {
 // expr = assign
 Node *expr() {
     Node *node = assign();
-    AST_type(node);
+    AST_type(1, node);
 	return node;
 }
 
@@ -560,16 +455,13 @@ Node *unary() {
 		return new_binary(ND_SUB, new_num(0), unary());
     else if (consume("*"))
         return new_binary(ND_DEREF, unary(), NULL);
-    else if (consume("&")) {
-        Node *node = primary();
-        if (node->kind != ND_LVAR)
-            error_at(token->str, "& 変数 である必要があります");
-        return new_binary(ND_ADDR, node, NULL);
-    } else if (consume_kind(TK_SIZEOF)) {
+    else if (consume("&"))
+        return new_binary(ND_ADDR, unary(), NULL);
+    else if (consume_kind(TK_SIZEOF)) {
         Node *node = unary();
         if (node->kind == ND_STR_PTR)
             node->kind = ND_STR;
-        return new_num(get_size(AST_type(node)));
+        return new_num(get_size(AST_type(1, node)));
     }
     return primary();
 }
@@ -595,8 +487,10 @@ Node *primary() {
                 for (i = 0; ; i++) {
                     if (i == 6)
                         error_at(token->str, "引数の個数は7個以上に対応していません");
+
                     node->arg[i] = assign();
-                    
+                    AST_type(1, node->arg[i]);
+
                     if (consume(",")) {} // 次の引数がある
                     else if (consume(")")) break; // 引数終了
                     else error_at(token->str, "引数が正しくありません");
@@ -617,12 +511,19 @@ Node *primary() {
             if (node->lvar->type->ty == ARRAY ||
                 node->lvar->type->ty == PTR) {
                 // 添え字の場合
+                VarType *type = lvar->type;
                 while (consume("[")) {
                     node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
-                    node->array_accessing = 1;
+                    if ((type->ty == ARRAY || type->ty == PTR) && 
+                        (type->ptr_to->ty == ARRAY || type->ptr_to->ty == PTR)) 
+                        node->array_accessing = 1;
+                    
+                    if (type->ptr_to)
+                        type = type->ptr_to;
+                    else
+                        error_at(token->str, "型違反です");
                     expect("]");
                 }
-                node->array_accessing = 0;
             }    
         }
         return node;

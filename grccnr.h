@@ -153,7 +153,9 @@ Token *tokenize();
 Node *new_node(NodeKind kind);
 Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
 Node *new_num(int val);
+Node *new_char(char c);
 LVar *find_lvar(Token *tok);
+char *str_copy(Token *tok);
 
 Node *create_if_node(int con, int chain);
 Node *create_else_node(int con, int chain);
@@ -180,6 +182,10 @@ void gen_stmt(Node *node);
 void gen_global_var();
 
 // ---------- 構文木の型を調査 ---------- //
-VarType *AST_type(Node *node);
+VarType *AST_type(int ch, Node *node);
 int get_size(VarType *type);
 VarType *get_type(VarType *type);
+int get_offset(Node *node);
+
+// ---------- 初期化 ---------- //
+Node *initialize(int type, VarType *var_type, Node *lvar_node);

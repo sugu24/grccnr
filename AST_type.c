@@ -68,28 +68,44 @@ VarType *get_type(VarType *type) {
     return type;
 }
 
+// 初期化時のグローバル変数の配列の場合にoffsetを返す
+int get_offset(Node *node) {
+    if (node->kind != ND_ASSIGN)
+        error("get_offsetはkindがND_ASSIGNである必要があります");
+
+    int offset = 0;
+    node = node->lhs;
+
+    while (node->kind != ND_LVAR) {
+        offset += node->lhs->rhs->lhs->val * node->lhs->rhs->rhs->val;
+        node = node->lhs->lhs;
+    }
+
+    return offset;
+}
+
 // 戻り値 Type:(int,ptr) ptrs:ptr?
-VarType *AST_type(Node *node) {
-    //printf("%d\n", node->kind);
+VarType *AST_type(int ch, Node *node) {
+    // printf("kind %d\n", node->kind);
     VarType *lhs_var_type, *rhs_var_type;
     VarType *var_type; // 整数や比較演算の場合に使う
     int lsize, rsize;
     switch (node->kind) {
         case ND_ADD:
-            lhs_var_type = AST_type(node->lhs);
-            rhs_var_type = AST_type(node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
             break;
         case ND_SUB:
-            lhs_var_type = AST_type(node->lhs);
-            rhs_var_type = AST_type(node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
             break;
         case ND_MUL:
-            lhs_var_type = AST_type(node->lhs);
-            rhs_var_type = AST_type(node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
             break;
         case ND_DIV:
-            lhs_var_type = AST_type(node->lhs);
-            rhs_var_type = AST_type(node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
             break;
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
@@ -113,52 +129,55 @@ VarType *AST_type(Node *node) {
             var_type->ptr_to->ty = CHAR;
             return var_type;
         case ND_ADDR:
-            AST_type(node->lhs);
+            AST_type(ch, node->lhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = PTR;
             return var_type;
         case ND_DEREF:
-            var_type = AST_type(node->lhs);
+            var_type = AST_type(ch, node->lhs);
             if (var_type->ptr_to)
                 var_type = var_type->ptr_to;
             else
                 error_at(token->str, "式内のポインタの型が一致しません");
             return var_type;
         case ND_EQ:
-            AST_type(node->lhs);
-            AST_type(node->rhs);
+            AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             return var_type;
         case ND_NE:
-            AST_type(node->lhs);
-            AST_type(node->rhs);
+            AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             return var_type;
         case ND_LT:
-            AST_type(node->lhs);
-            AST_type(node->rhs);
+            AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             return var_type;
         case ND_LE:
-            AST_type(node->lhs);
-            AST_type(node->rhs);
+            AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             return var_type;
         case ND_ASSIGN:
-            lhs_var_type = AST_type(node->lhs);
-            rhs_var_type = AST_type(node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
-            //lsize = get_size(lhs_var_type);
-            //rsize = get_size(rhs_var_type);
+            lsize = get_size(lhs_var_type);
+            rsize = get_size(get_type(rhs_var_type));
+            if (rsize >= 8 && lsize < rsize)
+                error_at(token->str, "右辺より左辺の方がサイズが小さいです");
             return rhs_var_type;
         case ND_LVAR:
+            //printf("lvar->ty=%d, lvar->array_size=%d\n", node->lvar->type->ty, node->lvar->type->array_size);
             return node->lvar->type;
         case ND_RETURN:
-            lhs_var_type = AST_type(node->lhs);
+            lhs_var_type = AST_type(ch, node->lhs);
             if (returnable(now_func->func_type_name->type, lhs_var_type))
                 return lhs_var_type;
             else
@@ -174,7 +193,7 @@ VarType *AST_type(Node *node) {
         case ND_FOR:
             error_at(token->str, "for節は評価出来ません");
         case ND_BLOCK:
-            error_at(token->str, "block節は評価出来ません");
+            return AST_type(ch, node->next_stmt);
         case ND_CALL_FUNC:
             return func_type(node);
         default:
@@ -190,11 +209,11 @@ VarType *AST_type(Node *node) {
 
     // それぞれ指している値の意味が異なる場合
     // ptrs--してからsizeを取得 例) int*なら+4
-    if (lhs_var_type->ptr_to && !rhs_var_type->ptr_to) {
+    if (ch && lhs_var_type->ptr_to && !rhs_var_type->ptr_to) {
         node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
         return lhs_var_type;
     }
-    else if (!lhs_var_type->ptr_to && rhs_var_type->ptr_to) {
+    else if (ch && !lhs_var_type->ptr_to && rhs_var_type->ptr_to) {
         node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         return rhs_var_type;
     }
