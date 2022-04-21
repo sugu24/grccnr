@@ -220,12 +220,13 @@ Type get_var_type() {
 VarType *new_var_type() {
     VarType *var_type, *temp_type, *top_var_type;
     Type type;
+    int typedef_type = 0;
     top_var_type = var_type = calloc(1, sizeof(VarType));
-
+    
     // 型取得
     while (true) {
         if (consume_kind(TK_TYPEDEF))
-            var_type->typedef_type = 1;
+            typedef_type = 1;
         else if (type = get_var_type()) {
             if (var_type->ty)
                 error_at(token->str, "型は一意に定めなければいけません");
@@ -247,7 +248,7 @@ VarType *new_var_type() {
         top_var_type->ptr_to = var_type;
         var_type = top_var_type;
     }
-
+    var_type->typedef_type = typedef_type;
     return top_var_type;
 }
 
@@ -331,11 +332,11 @@ LVar *declare_var(int type) {
     if (lvar->type->typedef_type) {
         if (lvar->initial)
             error_at(token->str, "typedef宣言で新しく宣言された型に対して初期化出来ません");
-        
+
         Typedef *type_def = new_typedef(lvar->type, lvar->name, lvar->len);
         type_def->next = typedefs;
         typedefs = type_def;
-        return NULL;
+        return lvar;
     } 
     // 変数宣言終了
     else if (type == 0 || token_str(";"))
@@ -361,7 +362,7 @@ Func *glbstmt() {
     var_or_func = declare_var(2);
     
     // typedef宣言の場合Funcは返さない
-    if (!var_or_func) {
+    if (var_or_func->type->typedef_type) {
         expect(";");
         return NULL;
     }
@@ -381,8 +382,9 @@ Func *glbstmt() {
             if (i == 6)
                 error_at(token->str, "引数が7つ以上に対応していません");
             
-            if (is_var_type()) {
-                arg_var = declare_var(0);
+            if (arg_var = declare_var(0)) {
+                if (arg_var->type->typedef_type)
+                    error_at(token->str, "引数でtypedef宣言できません");
                 arg_var->next = locals;
                 locals = arg_var;
             }
@@ -419,13 +421,11 @@ Node *stmt() {
     LVar *lvar;
 
     // 変数宣言またはtypedef宣言
-    while (is_var_type() || token_kind(TK_TYPEDEF)) {
-        if (token_kind(TK_TYPEDEF)) {
-            declare_var(1);
+    while (lvar = declare_var(1)) {
+        if (lvar->type->typedef_type) {
             expect(";");
             return NULL;
         } else {
-            lvar = declare_var(1);
             lvar->next = locals;
             locals = lvar;
             expect(";");

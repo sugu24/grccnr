@@ -5,6 +5,12 @@ int main() {
         typedef int c;
         c s;
         printf("size %d\n", sizeof(s));
+        typedef int* intpp;
+        intpp ipp;
+        printf("size intpp %d\n", sizeof(ipp));
+        char typedef * char_p;
+        char_p char__p;
+        printf("size char_p %d\n", sizeof(char__p));
         abcd a[10] = {0,1,2,3,4,5,6,7,8,9};
         fghi *b = a;
 	printf("%d %d\n", a[6], *(b+6));
