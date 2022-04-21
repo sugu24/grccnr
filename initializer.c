@@ -15,7 +15,7 @@ Node *init_local_string(Token *tok, VarType *var_type, Node *lvar_node) {
         //next_cand_stmt = calloc(1, sizeof(Node));
         next_cand_stmt = new_binary(ND_ASSIGN,
             new_binary(ND_DEREF, 
-                new_binary(ND_ADD, lvar_node, new_num(i)), 
+                new_binary(ND_ADD, lvar_node, new_binary(ND_MUL, new_num(i), new_num(1))), 
                 NULL),
             new_char(tok->str[i]));
         
@@ -99,7 +99,7 @@ Node *array_initialize(int type, VarType *var_type, Node *lvar_node) {
             
             next_cand_stmt = init_data(type, var_type, 
                 new_binary(ND_DEREF, new_binary(ND_ADD, next_cand_stmt, new_num(comma_stack[i])), NULL));
-            
+
             next_node = calloc(1, sizeof(Node));
             if (next_cand_stmt->stmt)
                 next_node = next_cand_stmt;
@@ -114,10 +114,12 @@ Node *array_initialize(int type, VarType *var_type, Node *lvar_node) {
             cur_node = next_node;
         }
     }
-    
+
     if (!var_type->array_size)
         var_type->array_size = comma_stack[0] + 1;
     
+    if (get_offset(cur_node->stmt) + get_size(get_type(var_type)) > get_size(var_type))
+        error_at(token->str, "配列のサイズを超えた範囲に初期化されています");
     return head_node;
 }
 

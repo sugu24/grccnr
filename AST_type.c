@@ -75,7 +75,6 @@ int get_offset(Node *node) {
 
     int offset = 0;
     node = node->lhs;
-
     while (node->kind != ND_LVAR) {
         offset += node->lhs->rhs->lhs->val * node->lhs->rhs->rhs->val;
         node = node->lhs->lhs;
