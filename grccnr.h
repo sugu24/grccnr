@@ -18,6 +18,7 @@ typedef struct LVar LVar;
 typedef struct VarType VarType;
 
 typedef struct Typedef Typedef;
+typedef struct Struct Struct;
 // ---------- global var ---------- //
 extern char *user_input;    // 入力プログラム
 extern Token *token;        // 現在着目しているトークン
@@ -26,6 +27,7 @@ extern LVar *locals;        // 変数名の連結リスト
 extern LVar *global_var;    // グローバル変数
 extern LVar *strs;          // 文字リテラル
 extern Typedef *typedefs;   // typedefの連結リスト
+extern Struct *structs;     // structの連結リスト
 extern LVar *func_locals[1024]; // 関数内のローカル変数
 extern char *arg_register[6][4]; // 引数を記憶するレジスタ
 
@@ -47,6 +49,7 @@ typedef enum {
     TK_SIZEOF,   // sizeof
     TK_STR,      // 文字列
     TK_TYPEDEF,  // typedef
+    TK_STRUCT,   // struct
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -85,6 +88,9 @@ typedef enum {
     ND_STR_PTR, // 21 文字列のポインタ
     ND_STR,     // 22 文字リテラル
     ND_CHAR,    // 23 1文字
+    ND_INDEX,   // 24 []
+    ND_MEMBAR,  // 25 メンバ変数
+    ND_MEMBAR_ACCESS, // struct.membar
 } NodeKind;
 
 // 変数の型
@@ -96,16 +102,17 @@ struct Node {
 	Node *lhs;     // 左辺
 	Node *rhs;     // 右辺
     Node *mhs;     // forの(;;)で使う
-    Node *stmt;   // if,for,whileのstmt
+    Node *stmt;    // if,for,whileのstmt
     Node *next_if_else; // else if or elseのノード
-    Node *next_stmt; // block内のstmtを表す
+    Node *next_stmt;  // block内のstmtを表す
     int val;       // kindがND_NUMの場合のみ使う
     int offset;    // kindがND_LVAR, ND_ELSE_IF,ND_DEREFの場合に使う
     int control;   // kindが制御構文の場合のみ使う(ラベル番号)
-    char *func_name; // kindがND_CALL_FUNCの場合のみ使う
-    int array_accessing;   // 配列でmov rax, [rax]しない場合に使う
-    Node *arg[7];  // kindがND_CALL_FUNCの場合のみ使う
-    LVar *lvar;     // 変数の場合
+    char *func_name;  // kindがND_CALL_FUNCの場合のみ使う
+    int access;    // 配列でmov rax, [rax]しない場合に使う
+    Node *arg[7];     // kindがND_CALL_FUNCの場合のみ使う
+    LVar *lvar;       // 変数の場合
+    Struct *struct_p; // STRUCTの場合に使用
 };
 
 // 変数の種類
@@ -113,8 +120,7 @@ struct VarType {
     Type ty;
     VarType *ptr_to;
     size_t array_size;
-    int typedef_type;
-    char *struct_name;
+    Struct *struct_p;  // ty=STRUCTの場合使用
 };
 
 // 変数の型
@@ -125,7 +131,7 @@ struct LVar {
     char *name; // 変数の名前
     char *str;  // 文字リテラル
     int len;    // len(name)
-    int offset; // RBPからのオフセット
+    int offset; // オフセット
     int glb_var;  // グローバル変数
 };
 
@@ -144,6 +150,14 @@ struct Typedef {
     char *name; // 宣言する名前
     int len;           // len(define_name)
 };
+
+// structの型
+struct Struct {
+    Struct *next;  // 次のstruct
+    char *name;    // タグ名
+    int len;       // len(タグ名)
+    LVar *membar;  // メンバ変数
+}; 
 
 // ---------- error ---------- //
 void error(char *fmt, ...);
@@ -170,6 +184,7 @@ Node *new_num(int val);
 Node *new_char(char c);
 LVar *find_lvar(Token *tok);
 char *str_copy(Token *tok);
+LVar *declare_var(int type);
 
 Node *create_if_node(int con, int chain);
 Node *create_else_node(int con, int chain);
@@ -188,7 +203,7 @@ Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
-
+Node *attach(Node *node);
 // ---------- generator ---------- //
 void gen_func(Func *func);
 void gen_addr(Node *node);

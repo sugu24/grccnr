@@ -17,6 +17,7 @@ assert(){
 	fi
 }
 
+#assert 10 testcase/test10.gc
 #assert 0 testcase/test9.gc
 #assert 2 testcase/test8.gc
 #assert 0 testcase/test7.gc
@@ -26,7 +27,8 @@ assert(){
 #assert 11 testcase/test3.gc
 #assert 34 testcase/test2.gc
 #assert 0 testcase/test4.gc
-#assert 100 -f testcase/end.gc
+#assert 100 testcase/end.gc
+
 assert 1 'int main() { int a[4][3]; a[3][2] = 1; return a[3][2]; }'
 
 assert 97 'int main() { char a; char b[3]; b[0] = 97; a = b[0]; return a; }'
@@ -78,7 +80,7 @@ assert 4 'int bar(int *x) { *x = 4; } int main() { int *a; int b; b = 1; a = &b;
 assert 10 'int bar(int **x) { int y; y = 10; *x = &y; } int main() { int *a; int b; b = 1; a = &b; bar(&a); return *a; }'
 
 assert 3 'int main() { int x; x = 3; int *y; y = &x; return *y; }'
-assert 3 'int main() { int x; x = 3; int y; y = 5; int *z; z = &y + 4; return *z; }'
+assert 3 'int main() { int x; x = 3; int y; y = 5; int *z; z = &y + 1; return *z; }'
 
 assert 20 'int main() { int bar; bar = 2; if (bar == 2) bar = bar * 10; return bar; }'
 assert 1 'int main() { int bar; bar = 0; if (bar == 0) bar = 1; else if (bar > 0) bar = bar * 10; return bar; }'

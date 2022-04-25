@@ -6,6 +6,7 @@ LVar *global_var;
 LVar *strs;
 Func *now_func;
 Typedef *typedefs;
+Struct *structs;
 
 int control = 0;
 int str_num = 0;
@@ -74,7 +75,29 @@ VarType *get_typedefed_type() {
             return type_def->type;
     }
 
+    // tokの意味はtypedefでないから戻してNULLを返す
     token = tok;
+    return NULL;
+}
+
+// タグ名が定義されたstructならばStructを返す
+Struct *get_struct_type(Token *tok) {
+    for (Struct *struct_p = structs; structs; struct_p = struct_p->next) {
+        if (tok->len == struct_p->len &&
+            !memcmp(tok->str, struct_p->name, tok->len)) {
+            return struct_p;
+        }
+    }
+    return NULL;
+}
+
+// 引数でもらったStructからtokと同じメンバ変数のlvarを返す
+LVar *get_membar(Struct *struct_p, Token *tok) {
+    for (LVar *membar = struct_p->membar; membar; membar = membar->next) {
+        if (tok->len == membar->len &&
+            !memcmp(tok->str, membar->name, tok->len))
+            return membar;
+    }
     return NULL;
 }
 
@@ -130,6 +153,8 @@ Node *create_else_node(int con, int chain) {
         node = create_if_node(con, chain);
     else {
         node = new_node(ND_ELSE);
+        node->control = con;
+        node->offset = chain;
         node->stmt = stmt();
     }
     return node;
@@ -183,6 +208,59 @@ Node *create_return_node() {
     return node;
 }
 
+// structのtypeを生成する
+Struct *new_struct_type(int typedef_type) {
+    Struct *struct_p;
+    LVar *membar, *last_membar;
+    Token *tok;
+
+    // タグ名があるか
+    tok = consume_kind(TK_IDENT);
+    if (tok && (struct_p = get_struct_type(tok)))
+        // 既に定義されたタグ名ならそれを返す
+        return struct_p;
+    
+    // 新しいstructの生成
+    struct_p = calloc(1, sizeof(Struct));
+    if (tok) {
+        struct_p->name = tok->str;
+        struct_p->len = tok->len;
+    }
+
+    // structのメンバ変数ブロック開始
+    if (!consume("{"))
+        return struct_p;
+
+    // declare_varの引数が0なのは
+    // 初期化、typedef、structなしだから
+    last_membar = NULL;
+    while (membar = declare_var(0)) {
+        membar->next = last_membar;
+        last_membar = membar;
+        expect(";");
+    }
+    struct_p->membar = last_membar;
+
+    // structのメンバ変数ブロック終了
+    expect("}");
+
+    // 構造体定義されていたら登録
+    if (tok) {
+        // タグ名があるstructだから連結リストに追加
+        struct_p->next = structs;
+        structs = struct_p;
+
+        // typedefで同じタグ名のものがあれたVarTypeを入れ替える
+        for (Typedef *typedef_ = typedefs; typedef_; typedef_ = typedef_->next)
+            if (typedef_->type->ty == STRUCT && 
+                typedef_->type->struct_p->len == struct_p->len &&
+                !strncmp(typedef_->type->struct_p->name, struct_p->name, struct_p->len))
+                typedef_->type->struct_p = struct_p;
+    }
+
+    return struct_p;
+}
+
 // 関数名を(までヒープ領域にコピーしてそれを指す
 char *str_copy(Token *tok) {
     char *temp = (char*)malloc(sizeof(char) * (tok->len + 1));
@@ -191,22 +269,7 @@ char *str_copy(Token *tok) {
     return temp;
 }
 
-// 宣言系のexprであるか
-int is_var_type() {
-    if (token_kind(TK_INT))
-        return 1;
-    else if (token_kind(TK_CHAR))
-        return 1;
-    else if (token->kind == TK_IDENT){
-        for (Typedef *type_def = typedefs; type_def; type_def = type_def->next) {
-            if (token->len == type_def->len &&
-                !memcmp(token->str, type_def->name, token->len))
-                return 1;
-        }
-    }
-    return 0;
-}
-
+// 原始的な型かどうか
 Type get_var_type() {
     if (consume_kind(TK_INT))
         return INT;
@@ -217,27 +280,36 @@ Type get_var_type() {
 }
 
 // 変数の型を返す
-VarType *new_var_type() {
+VarType *new_var_type(int type) {
     VarType *var_type, *temp_type, *top_var_type;
-    Type type;
+    Type ty;
     int typedef_type = 0;
     top_var_type = var_type = calloc(1, sizeof(VarType));
     
     // 型取得
     while (true) {
-        if (consume_kind(TK_TYPEDEF))
+        if (consume_kind(TK_TYPEDEF)) {
             typedef_type = 1;
-        else if (type = get_var_type()) {
+        } else if (ty = get_var_type()) {
             if (var_type->ty)
                 error_at(token->str, "型は一意に定めなければいけません");
-            var_type->ty = type;
+            var_type->ty = ty;
         } else if (temp_type = get_typedefed_type()) {
-            if (temp_type->ty == STRUCT) 
-                var_type->struct_name = temp_type->struct_name;
+            if (temp_type->ty == STRUCT)
+                var_type->struct_p = temp_type->struct_p;
             var_type->ty = temp_type->ty;
+        } else if (consume_kind(TK_STRUCT)) {
+            var_type->ty = STRUCT;
+            var_type->struct_p = new_struct_type(typedef_type);
         } else
             break;
     }
+
+    // type=0 (arg) ならtypedef_typeはないはず
+    if (typedef_type && type == 0)
+        error_at(token->str, "引数ではtypedef宣言出来ません");
+
+    // 変数宣言なし
     if (!var_type->ty)
         return NULL;
 
@@ -248,8 +320,22 @@ VarType *new_var_type() {
         top_var_type->ptr_to = var_type;
         var_type = top_var_type;
     }
-    var_type->typedef_type = typedef_type;
-    return top_var_type;
+    
+    // typedef宣言ならtypdefefsにlvarとtypedef名を加える
+    if (typedef_type) {
+        Token *name;
+        if (!(name = consume_kind(TK_IDENT)))
+            error_at(token->str, "typedef宣言での宣言後の名前を指定してください");
+
+        Typedef *type_def = new_typedef(top_var_type, name->str, name->len);
+        type_def->next = typedefs;
+        typedefs = type_def;
+        expect(";");
+        return NULL;
+    } 
+    else {
+        return top_var_type;
+    }
 }
 
 // 変数の宣言 失敗なら途中でexitされる
@@ -260,21 +346,28 @@ LVar *declare_var(int type) {
     VarType *array_top, *array_bfr, *array_now;
 
     // 変数の型
-    lvar->type = new_var_type();
+    lvar->type = new_var_type(type);
     if (!lvar->type)
         return NULL;
-    
+
     // 変数名
     tok_var_name = consume_kind(TK_IDENT);
-    
-    if (!tok_var_name) 
+
+    if (!tok_var_name) { 
+        if (lvar->type->ty == STRUCT) {
+            // structかつvar_nameがない
+            // structの定義だけだった
+            expect(";");
+            return NULL;
+        }
         error_at(token->str, "宣言する変数名がありません");
+    }
     if (find_lvar(tok_var_name)) 
         error_at(tok_var_name->str, "既に宣言された変数名です");
-    
+
     lvar->name = str_copy(tok_var_name);
     lvar->len = tok_var_name->len;
-    
+
     // 関数ならreturn グローバル変数ならlvar->glb_var=1
     //printf("%d %c\n", type, *token->str);
     if (type == 2) {
@@ -286,9 +379,6 @@ LVar *declare_var(int type) {
 
     // []?
     if (token_str("[")) {
-        if (lvar->type->typedef_type)
-            error_at(token->str, "typedef宣言では [ は処理できません");
-
         array_top = array_bfr = calloc(1, sizeof(VarType));
         while (consume("[")) {
             array_now = calloc(1, sizeof(VarType));
@@ -310,7 +400,7 @@ LVar *declare_var(int type) {
     // 初期化ありローカル変数かグローバル変数
     Node *lvar_node = new_node(ND_LVAR);
     lvar_node->lvar = lvar;
-    
+
     if (type > 0 && consume("="))
         lvar->initial = initialize(type, lvar->type, lvar_node);
 
@@ -328,18 +418,8 @@ LVar *declare_var(int type) {
     lvar_node->lvar = lvar;
     lvar_node->offset = lvar->offset;
 
-    // typedef宣言ならtypdefefsにlvarとtypedef名を加える
-    if (lvar->type->typedef_type) {
-        if (lvar->initial)
-            error_at(token->str, "typedef宣言で新しく宣言された型に対して初期化出来ません");
-
-        Typedef *type_def = new_typedef(lvar->type, lvar->name, lvar->len);
-        type_def->next = typedefs;
-        typedefs = type_def;
-        return lvar;
-    } 
     // 変数宣言終了
-    else if (type == 0 || token_str(";"))
+    if (type == 0 || consume(";"))
         return lvar;
 
     error_at(token->str, "文の末尾は ; である必要があります");
@@ -349,9 +429,14 @@ LVar *declare_var(int type) {
 // program = stmt*
 void program() {
     int i = 0;
+    Token *bfr, *aft;
     while (!at_eof()) {
+        bfr = token;
         code[i] = glbstmt();
+        aft = token;
         if (code[i]) i++;
+        else if (bfr == aft)
+            error_at(token->str, "%sが処理できません", str_copy(token));
     }    
     code[i] = NULL;
 }
@@ -359,13 +444,15 @@ void program() {
 Func *glbstmt() {
     Func *func; // 関数の場合に仕様
     LVar *var_or_func, *arg_var;
+
+    // declare_varからNULLが返ってくる条件は
+    // typedef宣言
     var_or_func = declare_var(2);
     
     // typedef宣言の場合Funcは返さない
-    if (var_or_func->type->typedef_type) {
-        expect(";");
+    if (!var_or_func)
         return NULL;
-    }
+    
     // 関数
     else if (consume("(")) {
         if (var_or_func->initial)
@@ -383,8 +470,6 @@ Func *glbstmt() {
                 error_at(token->str, "引数が7つ以上に対応していません");
             
             if (arg_var = declare_var(0)) {
-                if (arg_var->type->typedef_type)
-                    error_at(token->str, "引数でtypedef宣言できません");
                 arg_var->next = locals;
                 locals = arg_var;
             }
@@ -402,8 +487,6 @@ Func *glbstmt() {
         // 連結リスト構築
         var_or_func->next = global_var;
         global_var = var_or_func;
-        expect(";");
-
         return NULL;
     }
     return NULL;
@@ -420,21 +503,17 @@ Node *stmt() {
     Node *node;
     LVar *lvar;
 
-    // 変数宣言またはtypedef宣言
-    while (lvar = declare_var(1)) {
-        if (lvar->type->typedef_type) {
-            expect(";");
+    // 変数宣言ならdeclare_varから返ってくる
+    Typedef *typed = typedefs;
+    if (lvar = declare_var(1)) {
+        lvar->next = locals;
+        locals = lvar;
+        if (lvar->initial)
+            return lvar->initial;
+        else 
             return NULL;
-        } else {
-            lvar->next = locals;
-            locals = lvar;
-            expect(";");
-            if (lvar->initial)
-                return lvar->initial;
-            else 
-                return NULL;
-        }
-    }
+    } else if (typed != typedefs)
+        return NULL;
 
     if (consume("{")) { // block文
         node = create_block_node();
@@ -471,7 +550,6 @@ Node *assign() {
     Node *node = equality();
     if (consume("=")) 
         node = new_binary(ND_ASSIGN, node, assign());
-    
     return node;
 }
 
@@ -512,9 +590,9 @@ Node *add() {
 	Node *node = mul();
 
 	for (;;) {
-		if (consume("+"))
+		if (consume("+")) {
             node = new_binary(ND_ADD, node, mul());
-        else if (consume("-"))
+        } else if (consume("-"))
 			node = new_binary(ND_SUB, node, mul());
 		else
 			return node;
@@ -544,6 +622,17 @@ Node *unary() {
     else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
     else if (consume_kind(TK_SIZEOF)) {
+        VarType *var_type;
+        Token *tok = token;
+
+        // sizeof(int or struct ...) or sizeof(変数)に対応
+        if (consume("(")) {
+            if (var_type = new_var_type(0)) {
+                expect(")");
+                return new_num(get_size(var_type));
+            }
+        }
+        token = tok;
         Node *node = unary();
         if (node->kind == ND_STR_PTR)
             node->kind = ND_STR;
@@ -553,18 +642,21 @@ Node *unary() {
 }
 
 Node *primary() {
-	// 次のトークンが"("なら、"(" expr ")"
-	if (consume("(")) {
-		Node *node = assign();
-		expect(")");
-		return node;
-	}
+    LVar *lvar;
+	Token *tok;
+    Node *node;
+    VarType *var_type;
+
+    // 次のトークンが"("なら、"(" expr ")"
+    while (consume("(")) {
+        node = assign();
+        expect(")");
+        return attach(node);
+    }
     
-	// それ以外なら数値(関数)か変数
-    Token *tok = consume_kind(TK_IDENT);
-    //printf("%s\n", token->str);
-    if (tok) {
-        Node *node = calloc(1, sizeof(Node));
+    if (tok = consume_kind(TK_IDENT)) {
+        // 変数か関数
+        node = calloc(1, sizeof(Node));
         if (consume("(")) { // 関数の場合
             node->kind = ND_CALL_FUNC;
             node->func_name = str_copy(tok);
@@ -574,9 +666,14 @@ Node *primary() {
                     if (i == 6)
                         error_at(token->str, "引数の個数は7個以上に対応していません");
 
-                    node->arg[i] = assign();
-                    AST_type(1, node->arg[i]);
-
+                    node->arg[i] = expr();
+                    
+                    // 文字列の場合はアドレスを関数に渡す
+                    var_type = AST_type(0, node->arg[i]);
+                    if (var_type->ty == ARRAY && get_type(var_type)->ty == CHAR) {
+                        node->arg[i]->access = 1;
+                    }                    
+                    
                     if (consume(",")) {} // 次の引数がある
                     else if (consume(")")) break; // 引数終了
                     else error_at(token->str, "引数が正しくありません");
@@ -584,33 +681,14 @@ Node *primary() {
             }
         } else { // 変数の場合
             node->kind = ND_LVAR;
-            LVar *lvar = find_lvar(tok);
-            if (!lvar)
+            if (!(node->lvar = find_lvar(tok)))
                 error_at(tok->str, "宣言されていない変数です");
             
             // 既存の変数
-            node->lvar = lvar;
-            if (!lvar->glb_var)
-                node->offset = lvar->offset;
+            if (!node->lvar->glb_var)
+                node->offset = node->lvar->offset;
 
-            // 配列の場合
-            if (node->lvar->type->ty == ARRAY ||
-                node->lvar->type->ty == PTR) {
-                // 添え字の場合
-                VarType *type = lvar->type;
-                while (consume("[")) {
-                    node = new_binary(ND_DEREF, new_binary(ND_ADD, node, assign()), NULL);
-                    if ((type->ty == ARRAY || type->ty == PTR) && 
-                        (type->ptr_to->ty == ARRAY || type->ptr_to->ty == PTR)) 
-                        node->array_accessing = 1;
-                    
-                    if (type->ptr_to)
-                        type = type->ptr_to;
-                    else
-                        error_at(token->str, "型違反です");
-                    expect("]");
-                }
-            }    
+            node = attach(node);
         }
         return node;
     }
@@ -632,4 +710,53 @@ Node *primary() {
 
     // 変数ではないなら数値
 	return new_num(expect_number());
+}
+
+Node *attach(Node *node) {
+    Node *mem_node;
+    LVar *lvar;
+    Token *tok;
+    VarType *type = AST_type(0, node);
+
+    // (assign), ->membar, .membar, [assign] の繰り返し
+	while (true) {
+        if (consume("[")) {
+            node = new_binary(ND_INDEX, new_binary(ND_ADD, node, assign()), NULL);
+            expect("]");
+            if (node->lhs->lhs->kind != ND_LVAR || node->lhs->lhs->lvar->type->ty != PTR)
+                node->lhs->lhs->access = 1;
+        }
+        else if (consume(".")) {
+            if (type->ty != STRUCT)
+                error_at(token->str, "左の候がstructでありません");
+            if (!(tok = consume_kind(TK_IDENT)))
+                error_at(token->str, "メンバ変数である必要があります");
+            if (!(lvar = get_membar(type->struct_p, tok)))
+                error_at(token->str, "メンバ変数である必要があります");
+            mem_node = new_node(ND_MEMBAR);
+            mem_node->lvar = lvar;
+            node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
+            type = lvar->type;
+            node->lhs->lhs->access = 1;
+        }
+        else if (consume("->")) {
+            if (type->ty != PTR || type->ptr_to->ty != STRUCT)
+                error_at(token->str, "左の候がstructでありません");
+            if (!(tok = consume_kind(TK_IDENT)))
+                error_at(token->str, "メンバ変数である必要があります");
+            if (!(lvar = get_membar(type->ptr_to->struct_p, tok)))
+                error_at(token->str, "メンバ変数である必要があります");
+            mem_node = new_node(ND_MEMBAR);
+            mem_node->lvar = lvar;
+            node = new_binary(ND_DEREF, node, NULL);
+            node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
+            type = lvar->type;
+            node->lhs->lhs->lhs->access = 1;
+        }
+        else
+            break;
+        // 1つ前のlhsはデータが欲しいわけではない
+        
+    }
+    return node;
 }

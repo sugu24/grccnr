@@ -10,10 +10,12 @@ char ss[4] = "aaa";
 int cc[][3] = {{1,2,3},{4,5,6},{7,8,9}};
 
 int main() {
+  
   char ssa[] = "abc";
   char sss[][4] = {"abc","def"};
+  
+  printf("a[0]=1->%d, a[1]=2->%d\n", a[0], a[1]);
 
-  printf("a[0]=1->%d, a[1]=2,->%d\n", a[0], a[1]);
   printf("b[0][0]=1->%d, b[0][1]=2->%d, b[1][0]=3->%d, b[1][1]=4->%d\n", b[0][0], b[0][1], b[1][0], b[1][1]);
   
   int c[2][4] = {{1,2,3,4}, {5,6,7,8}};
@@ -24,8 +26,11 @@ int main() {
     }
     printf("\n");
   }
+  
   printf("ssa=abc->%s, ssa[1]=b->%c\n", ssa, ssa[1]);
+  
   printf("sss[0]=abc->%s, sss[1]=def->%s, sss[1][1]=e->%c\n", sss[0], sss[1], sss[1][1]);
+  
   printf("ssa=abc->%s\n", ssa);
   printf("ss=abc->%s\n", ss);
   printf("s[0]=abc->%s\n", s[0]);
@@ -33,6 +38,6 @@ int main() {
   printf("s[1][1]=e->%c\n", s[1][1]);
   printf("s[0]=abc->%s, s[1]=def->%s, s[1][1]=e->%c\n", s[0], s[1], s[1][1]);
   return aa;
- 
+  
 }
 

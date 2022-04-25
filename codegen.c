@@ -63,18 +63,25 @@ void mov_rax_data(Node *node) {
         printf("  movsx rax, BYTE PTR [rax]\n");
     else if (size == 4)
         printf("  mov eax, [rax]\n");
-    else
+    else 
         printf("  mov rax, [rax]\n");
-            
+
+    return;
 }
 
 // グローバル変数
 // 代入式の左辺はアドレスをpushする
 void gen_addr(Node *node) {
     switch (node->kind) {
+        case ND_MEMBAR_ACCESS:
+            gen_stmt(node->lhs);
+            return;
+        case ND_INDEX:
+            gen_stmt(node->lhs);
+            return;
         case ND_DEREF:
             gen_stmt(node->lhs);
-            break;
+            return;
         case ND_LVAR:
             if (node->lvar->glb_var)
                 printf("  lea rax, .%s[rip]\n", node->lvar->name);
@@ -83,7 +90,7 @@ void gen_addr(Node *node) {
                 printf("  sub rax, %d\n", node->offset);
             }
             printf("  push rax\n");
-            break;
+            return;
         default:
             error("左辺の型を処理できません");
     }
@@ -94,6 +101,7 @@ void gen_addr(Node *node) {
 void gen_stmt(Node *node) {
     int i;
     int size;
+    // printf("%d\n", node->kind);
 	switch (node->kind) {
         case ND_CALL_FUNC:
             for (i = 0; i < 6 && node->arg[i]; i++)
@@ -219,9 +227,11 @@ void gen_stmt(Node *node) {
                 printf("  sub rax, %d\n", node->offset);
             }
             
-            // 配列でないならデータをraxへ
-            if (node->lvar->type->ty != ARRAY)
+            // アクセス中または配列、構造体は単体だとアドレス
+            if (!node->access && node->lvar->type->ty != ARRAY && node->lvar->type->ty != STRUCT) {
                 mov_rax_data(node);
+            }
+
             printf("  push rax\n");
             return;
         case ND_ADDR:
@@ -229,18 +239,35 @@ void gen_stmt(Node *node) {
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
-            if (!node->array_accessing) {
+            printf("  pop rax\n");
+            mov_rax_data(node);
+            printf("  push rax\n");
+            return;
+        case ND_INDEX:
+            gen_stmt(node->lhs);
+            if (!node->access) {
                 printf("  pop rax\n");
                 mov_rax_data(node);
                 printf("  push rax\n");
             }
             return;
+        case ND_MEMBAR_ACCESS:
+            gen_stmt(node->lhs);
+            if (!node->access) {
+                printf("  pop rax\n");
+                mov_rax_data(node);
+                printf("  push rax\n");
+            }
+            return;
+        case ND_MEMBAR:
+            printf("  push %d\n", node->offset);
+            return;
         case ND_ASSIGN:
             gen_addr(node->lhs);
             gen_stmt(node->rhs);
 
-            size = min(get_size(AST_type(0, node->lhs)), get_size(AST_type(0, node->rhs)));
-
+            size = get_size(AST_type(0, node->lhs));
+            
             printf("  pop rdi\n");
             printf("  pop rax\n");
 

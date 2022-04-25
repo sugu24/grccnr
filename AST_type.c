@@ -29,6 +29,13 @@ VarType *func_type(Node *node) {
         p->ty= INT;
         return p;
     }
+    // callocはlink.cのstdlib.hを使う
+    if (strcmp("calloc", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= PTR;
+        p->ptr_to = calloc(1, sizeof(VarType));
+        return p;
+    }
     error_at(token->str, "一致する関数がありません");
 }
 
@@ -48,18 +55,29 @@ int returnable(VarType *func_type, VarType *return_type) {
 // 変数のサイズを返す
 // get_size呼ぶときは*を処理した後
 int get_size(VarType *type) {
+    int res = 0;
     switch (type->ty) {
         case INT: 
-            return INT_SIZE;
+            res = INT_SIZE;
+            break;
         case CHAR: 
-            return CHAR_SIZE;
+            res = CHAR_SIZE;
+            break;
         case PTR:
-            return PTR_SIZE;
+            res = PTR_SIZE;
+            break;
         case ARRAY:
-            return type->array_size * get_size(type->ptr_to);
+            res = type->array_size * get_size(type->ptr_to);
+            break;
+        case STRUCT:
+            for (LVar *var = type->struct_p->membar; var; var = var->next) {
+                res += get_size(var->type);
+            }
+            break;
         default:
             error_at(token->str, "型が処理できません");
     }
+    return res;
 }
 
 // VarTypeが配列抜きで何の型を格納しているか返す
@@ -79,7 +97,16 @@ int get_offset(Node *node) {
         offset += node->lhs->rhs->lhs->val * node->lhs->rhs->rhs->val;
         node = node->lhs->lhs;
     }
+    
+    return offset;
+}
 
+// 構造体でのメンバ変数のオフセット
+int get_membar_offset(LVar *membar) {
+    int offset = 0;
+    for (membar = membar->next; membar; membar = membar->next) {
+        offset += get_size(membar->type);
+    }
     return offset;
 }
 
@@ -101,11 +128,27 @@ VarType *AST_type(int ch, Node *node) {
         case ND_MUL:
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);
-            break;
+            if (lhs_var_type->ty == ARRAY  ||
+                lhs_var_type->ty == PTR    ||
+                lhs_var_type->ty == STRUCT)
+                error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
+            if (rhs_var_type->ty == ARRAY  ||
+                rhs_var_type->ty == PTR    ||
+                rhs_var_type->ty == STRUCT)
+                error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
+            return lhs_var_type;
         case ND_DIV:
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);
-            break;
+            if (lhs_var_type->ty == ARRAY  ||
+                lhs_var_type->ty == PTR    ||
+                lhs_var_type->ty == STRUCT)
+                error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
+            if (rhs_var_type->ty == ARRAY  ||
+                rhs_var_type->ty == PTR    ||
+                rhs_var_type->ty == STRUCT)
+                error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
+            return lhs_var_type;
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
@@ -128,16 +171,27 @@ VarType *AST_type(int ch, Node *node) {
             var_type->ptr_to->ty = CHAR;
             return var_type;
         case ND_ADDR:
-            AST_type(ch, node->lhs);
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = PTR;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = AST_type(ch, node->lhs)->ty;
             return var_type;
         case ND_DEREF:
             var_type = AST_type(ch, node->lhs);
-            if (var_type->ptr_to)
+            if (var_type->ty == ARRAY || var_type->ty == PTR)
                 var_type = var_type->ptr_to;
             else
                 error_at(token->str, "式内のポインタの型が一致しません");
+            return var_type;
+        case ND_INDEX:
+            var_type = AST_type(ch, node->lhs);
+            if (var_type->ty == STRUCT || var_type->ty == ARRAY || var_type->ty == PTR) {
+                var_type = var_type->ptr_to;
+            } else
+                error_at(token->str, "式内のポインタの型が一致しません");
+            return var_type;
+        case ND_MEMBAR_ACCESS:
+            var_type = AST_type(ch, node->lhs);
             return var_type;
         case ND_EQ:
             AST_type(ch, node->lhs);
@@ -173,7 +227,9 @@ VarType *AST_type(int ch, Node *node) {
                 error_at(token->str, "右辺より左辺の方がサイズが小さいです");
             return rhs_var_type;
         case ND_LVAR:
-            //printf("lvar->ty=%d, lvar->array_size=%d\n", node->lvar->type->ty, node->lvar->type->array_size);
+            
+            return node->lvar->type;
+        case ND_MEMBAR:
             return node->lvar->type;
         case ND_RETURN:
             lhs_var_type = AST_type(ch, node->lhs);
@@ -205,18 +261,45 @@ VarType *AST_type(int ch, Node *node) {
     //        lhs_var_type->ptrs, rhs_var_type->ptrs);
     
     // 演算の場合
-
     // それぞれ指している値の意味が異なる場合
     // ptrs--してからsizeを取得 例) int*なら+4
-    if (ch && lhs_var_type->ptr_to && !rhs_var_type->ptr_to) {
+    
+    if (!ch) return lhs_var_type;
+
+    Type lt = lhs_var_type->ty, rt = rhs_var_type->ty;
+    if (lt == rt) {
+        return lhs_var_type;
+    } 
+    
+    if ((lt == INT || lt == CHAR) && (rt == INT || lt == CHAR))
+        return lhs_var_type;
+    
+    if (lt == PTR && (rt == CHAR || rt == INT))  {
         node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
         return lhs_var_type;
     }
-    else if (ch && !lhs_var_type->ptr_to && rhs_var_type->ptr_to) {
+    
+    if ((lt == CHAR || lt == INT) && rt == PTR) {
         node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         return rhs_var_type;
     }
-    // ポインタとポインタ(アドレスとアドレス)の演算
-    // lhsにrhsを足すイメージでlhs_var_typeを返す
-    return lhs_var_type;
+    
+    if (lt == ARRAY && (rt == CHAR || rt == INT)) {
+        node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
+        return lhs_var_type;
+    }
+    
+    if ((lt == CHAR || lt == INT) && rt == ARRAY) {
+        node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
+        return rhs_var_type;
+    }
+
+    if (lt == STRUCT) {
+        node->rhs->offset = get_membar_offset(node->rhs->lvar);
+        return rhs_var_type;
+    }
+
+    printf("%d %d\n", lt,rt);
+    error_at(token->str, "左辺の型と右辺の型との演算は出来ません");
+    error_at(token->str, "左辺の型 %d と 右辺の型 %d との演算は出来ません", lt, rt);
 }

@@ -1,0 +1,35 @@
+typedef struct strct strct;
+
+struct strct {
+	strct *next;
+	int b;
+};
+
+strct *new_strct(int b) {
+	strct *s = calloc(1, sizeof(strct));
+	s->b = b;
+	return s;
+}
+
+int main() {
+	int res = 0;
+	strct *sp1;
+	strct *sp2;
+        strct *sp;
+        strct s1;
+        strct s2;
+        sp1 = new_strct(1);
+        sp2 = new_strct(2);
+	sp1->next = sp2;
+        sp2->next = &s1;
+	s1.b = 3;
+	s2.b = 4;
+	s1.next = &s2;
+	s2.next = 0;
+	for (sp = sp1; sp; sp = sp->next) {
+		printf("%d\n", sp->b);
+		res = res + sp->b;
+		printf("%p\n", sp->next);
+	}
+	return res;
+}
