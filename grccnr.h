@@ -19,6 +19,8 @@ typedef struct VarType VarType;
 
 typedef struct Typedef Typedef;
 typedef struct Struct Struct;
+typedef struct Enum Enum;
+typedef struct EnumMem  EnumMem;
 // ---------- global var ---------- //
 extern char *user_input;    // 入力プログラム
 extern Token *token;        // 現在着目しているトークン
@@ -28,6 +30,7 @@ extern LVar *global_var;    // グローバル変数
 extern LVar *strs;          // 文字リテラル
 extern Typedef *typedefs;   // typedefの連結リスト
 extern Struct *structs;     // structの連結リスト
+extern Enum *enums;         // enumの連結リスト
 extern LVar *func_locals[1024]; // 関数内のローカル変数
 extern char *arg_register[6][4]; // 引数を記憶するレジスタ
 
@@ -50,6 +53,7 @@ typedef enum {
     TK_STR,      // 文字列
     TK_TYPEDEF,  // typedef
     TK_STRUCT,   // struct
+    TK_ENUM,     // enum
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -94,7 +98,7 @@ typedef enum {
 } NodeKind;
 
 // 変数の型
-typedef enum { INT = 1, CHAR, PTR, ARRAY, STRUCT } Type;
+typedef enum { INT = 1, CHAR, PTR, ARRAY, STRUCT, ENUM } Type;
 
 // 抽象構文木のノード型
 struct Node {
@@ -113,6 +117,7 @@ struct Node {
     Node *arg[7];     // kindがND_CALL_FUNCの場合のみ使う
     LVar *lvar;       // 変数の場合
     Struct *struct_p; // STRUCTの場合に使用
+    Enum *enm_p;      // なんとなく付けた
 };
 
 // 変数の種類
@@ -121,6 +126,7 @@ struct VarType {
     VarType *ptr_to;
     size_t array_size;
     Struct *struct_p;  // ty=STRUCTの場合使用
+    Enum *enum_p;      
 };
 
 // 変数の型
@@ -156,8 +162,24 @@ struct Struct {
     Struct *next;  // 次のstruct
     char *name;    // タグ名
     int len;       // len(タグ名)
-    LVar *membar;  // メンバ変数
+    LVar *membar;  // メンバ変数(ND_NUM)
 }; 
+
+// enumの型
+struct Enum {
+    Enum *next;    // 次のenumメンバ
+    char *name;
+    int len;
+    EnumMem *membar;  // enum内のメンバ
+};
+
+// enumのメンバの型
+struct EnumMem {
+    EnumMem *next;
+    Node *num_node;
+    char *name;
+    int len;
+};
 
 // ---------- error ---------- //
 void error(char *fmt, ...);

@@ -82,7 +82,7 @@ int main(int argc, char** argv){
 	}
 	
 	// トークナイズしてパースする
-    if (0) {
+    if (1) {
         filename = argv[1];
 	    user_input = read_file(filename);
     } 

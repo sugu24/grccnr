@@ -16,18 +16,18 @@ assert(){
 		exit 1
 	fi
 }
-
-#assert 10 testcase/test10.gc
-#assert 0 testcase/test9.gc
-#assert 2 testcase/test8.gc
-#assert 0 testcase/test7.gc
-#assert 0 testcase/test6.gc
-#assert 0 testcase/test5.gc
-#assert 0 testcase/test1.gc
-#assert 11 testcase/test3.gc
-#assert 34 testcase/test2.gc
-#assert 0 testcase/test4.gc
-#assert 100 testcase/end.gc
+assert 122 testcase/test11.gc
+assert 10 testcase/test10.gc
+assert 0 testcase/test9.gc
+assert 2 testcase/test8.gc
+assert 0 testcase/test7.gc
+assert 0 testcase/test6.gc
+assert 0 testcase/test5.gc
+assert 0 testcase/test1.gc
+assert 11 testcase/test3.gc
+assert 34 testcase/test2.gc
+assert 0 testcase/test4.gc
+assert 100 testcase/end.gc
 
 assert 1 'int main() { int a[4][3]; a[3][2] = 1; return a[3][2]; }'
 

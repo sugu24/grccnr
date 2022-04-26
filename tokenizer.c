@@ -178,6 +178,8 @@ Token *tokenize() {
                 cur = new_token(TK_TYPEDEF, cur, p, len);
             else if (len == 6 && strncmp(p, "struct", len) == 0)
                 cur = new_token(TK_STRUCT, cur, p, len);
+            else if (len == 4 && strncmp(p, "enum", len) == 0)
+                cur = new_token(TK_ENUM, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;

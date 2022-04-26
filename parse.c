@@ -7,6 +7,7 @@ LVar *strs;
 Func *now_func;
 Typedef *typedefs;
 Struct *structs;
+Enum *enums;
 
 int control = 0;
 int str_num = 0;
@@ -60,6 +61,20 @@ LVar *find_lvar(Token *tok) {
             return var;
         }
     }
+
+    return NULL;
+}
+
+// enumのメンバ変数を返す
+Node *find_enum_membar(Token *tok) {
+    for (Enum *enum_p = enums; enum_p; enum_p = enum_p->next) {
+        for (EnumMem *membar = enum_p->membar; membar; membar = membar->next) {
+            if (tok->len == membar->len &&
+                !memcmp(tok->str, membar->name, membar->len))
+                return membar->num_node;
+        }
+    }
+
     return NULL;
 }
 
@@ -81,7 +96,7 @@ VarType *get_typedefed_type() {
 }
 
 // タグ名が定義されたstructならばStructを返す
-Struct *get_struct_type(Token *tok) {
+Struct *get_struct(Token *tok) {
     for (Struct *struct_p = structs; structs; struct_p = struct_p->next) {
         if (tok->len == struct_p->len &&
             !memcmp(tok->str, struct_p->name, tok->len)) {
@@ -97,6 +112,17 @@ LVar *get_membar(Struct *struct_p, Token *tok) {
         if (tok->len == membar->len &&
             !memcmp(tok->str, membar->name, tok->len))
             return membar;
+    }
+    return NULL;
+}
+
+// タグ名が定義されたenumならばStructを返す
+Enum *get_enum(Token *tok) {
+    for (Enum *enum_p = enums; enum_p; enum_p = enum_p->next) {
+        if (tok->len == enum_p->len &&
+            !memcmp(tok->str, enum_p->name, tok->len)) {
+            return enum_p;
+        }
     }
     return NULL;
 }
@@ -208,15 +234,17 @@ Node *create_return_node() {
     return node;
 }
 
+// ----------------------- 変数宣言系 ----------------------- //
+
 // structのtypeを生成する
-Struct *new_struct_type(int typedef_type) {
+Struct *new_struct() {
     Struct *struct_p;
     LVar *membar, *last_membar;
     Token *tok;
 
     // タグ名があるか
     tok = consume_kind(TK_IDENT);
-    if (tok && (struct_p = get_struct_type(tok)))
+    if (tok && (struct_p = get_struct(tok)))
         // 既に定義されたタグ名ならそれを返す
         return struct_p;
     
@@ -261,6 +289,70 @@ Struct *new_struct_type(int typedef_type) {
     return struct_p;
 }
 
+Enum *new_enum() {
+    Enum *enum_p;
+    Token *tok;
+    EnumMem *membar, *last_membar;
+    int val; // メンバの数字
+
+    // タグ名があるか
+    tok = consume_kind(TK_IDENT);
+    if (tok && (enum_p = get_enum(tok)))
+        // 既に定義されたタグ名ならそれを返す
+        return enum_p;
+    
+    // 新しいenumの生成
+    enum_p = calloc(1, sizeof(Enum));
+    if (tok) {
+        enum_p->name = tok->str;
+        enum_p->len = tok->len;
+    }
+
+    // enumのメンバ変数ブロック開始
+    // または typedef enum name nameの形ならreturn 1
+    if (!consume("{"))
+        return enum_p;
+
+    // enumのカッコ内の値をenumに追加
+    last_membar = NULL;
+    val = 0;
+    while (tok = consume_kind(TK_IDENT)) {
+        membar = calloc(1, sizeof(EnumMem));
+        membar->name = tok->str;
+        membar->len = tok->len;
+        if (consume("=")) {
+            if (tok = consume_kind(TK_NUM))
+                val = tok->val;
+            else
+                error_at(token->str, "数字である必要があります");
+        }
+        membar->num_node = calloc(1, sizeof(Node));
+        membar->num_node->kind = ND_NUM;
+        membar->num_node->val = val;
+        membar->next = last_membar;
+        last_membar = membar;
+        expect(",");
+        val++;
+    }
+    enum_p->membar = last_membar;
+
+    // structのメンバ変数ブロック終了
+    expect("}");
+
+    // enum登録
+    enum_p->next = enums;
+    enums = enum_p;
+    
+    // typedefで同じタグ名のものがあれたVarTypeを入れ替える
+    for (Typedef *typedef_ = typedefs; typedef_; typedef_ = typedef_->next)
+        if (typedef_->type->ty == INT && 
+            typedef_->type->enum_p->len == enum_p->len &&
+            !strncmp(typedef_->type->enum_p->name, enum_p->name, enum_p->len))
+            typedef_->type->enum_p = enum_p;
+    
+    return enum_p;
+}
+
 // 関数名を(までヒープ領域にコピーしてそれを指す
 char *str_copy(Token *tok) {
     char *temp = (char*)malloc(sizeof(char) * (tok->len + 1));
@@ -295,12 +387,23 @@ VarType *new_var_type(int type) {
                 error_at(token->str, "型は一意に定めなければいけません");
             var_type->ty = ty;
         } else if (temp_type = get_typedefed_type()) {
+            if (var_type->ty)
+                error_at(token->str, "型は一意に定めなければいけません");
             if (temp_type->ty == STRUCT)
                 var_type->struct_p = temp_type->struct_p;
+            else if (temp_type->enum_p)
+                var_type->enum_p = temp_type->enum_p;
             var_type->ty = temp_type->ty;
         } else if (consume_kind(TK_STRUCT)) {
+            if (var_type->ty)
+                error_at(token->str, "型は一意に定めなければいけません");
             var_type->ty = STRUCT;
-            var_type->struct_p = new_struct_type(typedef_type);
+            var_type->struct_p = new_struct();
+        } else if (consume_kind(TK_ENUM)) {
+            if (var_type->ty)
+                error_at(token->str, "型は一意に定めなければいけません"); 
+            var_type->ty = INT;
+            var_type->enum_p = new_enum();
         } else
             break;
     }
@@ -353,8 +456,8 @@ LVar *declare_var(int type) {
     // 変数名
     tok_var_name = consume_kind(TK_IDENT);
 
-    if (!tok_var_name) { 
-        if (lvar->type->ty == STRUCT) {
+    if (!tok_var_name) {
+        if (lvar->type->ty == STRUCT || lvar->type->enum_p) {
             // structかつvar_nameがない
             // structの定義だけだった
             expect(";");
@@ -364,7 +467,7 @@ LVar *declare_var(int type) {
     }
     if (find_lvar(tok_var_name)) 
         error_at(tok_var_name->str, "既に宣言された変数名です");
-
+    
     lvar->name = str_copy(tok_var_name);
     lvar->len = tok_var_name->len;
 
@@ -644,7 +747,7 @@ Node *unary() {
 Node *primary() {
     LVar *lvar;
 	Token *tok;
-    Node *node;
+    Node *node, *enum_mem_node;
     VarType *var_type;
 
     // 次のトークンが"("なら、"(" expr ")"
@@ -681,9 +784,14 @@ Node *primary() {
             }
         } else { // 変数の場合
             node->kind = ND_LVAR;
-            if (!(node->lvar = find_lvar(tok)))
-                error_at(tok->str, "宣言されていない変数です");
             
+            // 変数->enumの順番
+            if (node->lvar = find_lvar(tok)) {}            
+            else if (enum_mem_node = find_enum_membar(tok))
+                return enum_mem_node;
+            else error_at(tok->str, "宣言されていない変数です");
+
+                
             // 既存の変数
             if (!node->lvar->glb_var)
                 node->offset = node->lvar->offset;
