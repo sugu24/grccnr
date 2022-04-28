@@ -8,6 +8,7 @@ Func *now_func;
 Typedef *typedefs;
 Struct *structs;
 Enum *enums;
+Prototype *prototype = NULL;
 
 int control = 0;
 int str_num = 0;
@@ -116,7 +117,7 @@ LVar *get_membar(Struct *struct_p, Token *tok) {
     return NULL;
 }
 
-// タグ名が定義されたenumならばStructを返す
+// タグ名が定義されたenumならばEnumを返す
 Enum *get_enum(Token *tok) {
     for (Enum *enum_p = enums; enum_p; enum_p = enum_p->next) {
         if (tok->len == enum_p->len &&
@@ -125,6 +126,69 @@ Enum *get_enum(Token *tok) {
         }
     }
     return NULL;
+}
+
+// 関数宣言でprototypeに追加
+void add_prototype(Func *func) {
+    Prototype *proto = calloc(1, sizeof(Prototype));
+    proto->func = func;
+    proto->next = prototype;
+    prototype = proto;
+}
+
+// プロトタイプと同じ関数名なのに引数が異なる場合1を返す
+void prototype_arg(Func *func, Func *proto_func) {
+    LVar *proto_arg, *func_arg;
+    proto_arg = proto_func->arg;
+    func_arg = func->arg;
+    while (1) {
+        // argの比較
+        if (!proto_arg && !func_arg) break;
+        else if (!(proto_arg && func_arg)) 
+            error("関数%sの関数宣言との引数の個数が異なります", func->func_type_name->name);
+        printf("%s\n", token->str);
+        if (!same_type(proto_arg->type, func_arg->type))
+            error("関数 %s の引数 %s の型が関数宣言時の変数 %s の型と異なります", func->func_type_name->name, func_arg->name, func_arg->name);
+        
+        proto_arg = proto_arg->next;
+        func_arg = func_arg->next;
+    }
+}
+
+// 同じPrototypeがあれば1を返す その他は0を返す
+Func *same_prototype(Func *func) {
+    // prototypeに宣言済みの
+    for (Prototype *proto = prototype; proto; proto = proto->next) {
+        if (proto->func->func_type_name->len == func->func_type_name->len &&
+            strncmp(proto->func->func_type_name->name, func->func_type_name->name, func->func_type_name->len) == 0) {
+            if (same_type(proto->func->func_type_name->type, func->func_type_name->type))
+                return proto->func;
+            else
+                error("関数 %s の戻り値の型が関数宣言時の戻り値の型と異なります", func->func_type_name->name);
+        }
+    }
+
+    return 0;
+}
+
+// 同じ関数があれば1を返す その他は0を返す
+Func *same_function(Func *func) {
+    // 定義済みの関数
+    for (int i = 0; code[i]; i++) {
+        if (code[i]->func_type_name->len == func->func_type_name->len &&
+            strcmp(code[i]->func_type_name->name, func->func_type_name->name) == 0) {
+            if (same_type(code[i]->func_type_name->type, func->func_type_name->type))
+                return code[i];
+            else
+                error_at(token->str, "戻り値の型が異なります");
+        }
+    }
+
+    Func *proto_func;
+    if (proto_func = same_prototype(func)) {
+        prototype_arg(func, proto_func);
+    }
+    return 0;
 }
 
 // ND_BLOCKを返す　先頭のstmtはNULL
@@ -144,6 +208,25 @@ Node *create_block_node() {
         cur_node->next_stmt = NULL;
     }
     return head_node;
+}
+
+// include 
+void include() {
+    Token *tok;
+    char *temp, *filename;
+    if (tok = consume_kind(TK_STR)) {
+        filename = str_copy(tok);
+        temp = user_input;
+        tok = token;
+	    user_input = read_file(filename);
+        token = tokenize();
+	    program();
+        user_input = temp;
+        token = tok;
+    }
+    else {
+        error_at(token->str, "ファイル名である必要があります");
+    }
 }
 
 // ---------- if or else if or else ---------- //
@@ -472,7 +555,7 @@ LVar *declare_var(int type) {
     lvar->len = tok_var_name->len;
 
     // 関数ならreturn グローバル変数ならlvar->glb_var=1
-    //printf("%d %c\n", type, *token->str);
+    // printf("%d %c\n", type, *token->str);
     if (type == 2) {
         if (token_str("("))
             return lvar;
@@ -532,15 +615,14 @@ LVar *declare_var(int type) {
 // program = stmt*
 void program() {
     int i = 0;
-    Token *bfr, *aft;
+    Token *bfr;
     while (!at_eof()) {
         bfr = token;
         code[i] = glbstmt();
-        aft = token;
         if (code[i]) i++;
-        else if (bfr == aft)
+        else if (bfr == token)
             error_at(token->str, "%sが処理できません", str_copy(token));
-    }    
+    }
     code[i] = NULL;
 }
 
@@ -548,10 +630,18 @@ Func *glbstmt() {
     Func *func; // 関数の場合に仕様
     LVar *var_or_func, *arg_var;
 
+    if (consume("#")) {
+        if (consume_kind(TK_INCLUDE))
+            include();
+        else
+            error_at(token->str, "処理できません");
+        return NULL;
+    }
+
     // declare_varからNULLが返ってくる条件は
     // typedef宣言
     var_or_func = declare_var(2);
-    
+
     // typedef宣言の場合Funcは返さない
     if (!var_or_func)
         return NULL;
@@ -560,10 +650,10 @@ Func *glbstmt() {
     else if (consume("(")) {
         if (var_or_func->initial)
             error_at(token->str, "変数の初期化後に ( は未定義です");
-        func = calloc(1, sizeof(Func));
-        now_func = func;
 
+        func = calloc(1, sizeof(Func));
         func->func_type_name = var_or_func;
+
         // ローカル変数の初期化
         locals = NULL;
 
@@ -580,10 +670,23 @@ Func *glbstmt() {
             else if (consume(")")) break;
             else error_at(token->str, "','か')'である必要があります");
         }
-        func->arg = locals; // 引数
+        func->arg = locals; // 引数    
+        now_func = func;
         func->stmt = stmt(); // 処理
         func->locals = locals; // ローカル変数
-        return func;
+
+        if (!func->stmt) {
+            // 関数宣言
+            if (same_prototype(func))// 同じ名前の関数があればエラー
+                error_at(token->str, "関数名が重複しています");
+            add_prototype(func);
+            return NULL;
+        } else {
+            // 関数定義
+            if (same_function(func))// 同じ名前の関数があればエラー
+                error_at(token->str, "関数名が重複しています");
+            return func;
+        }       
     }
     // グローバル変数
     else {
@@ -592,7 +695,6 @@ Func *glbstmt() {
         global_var = var_or_func;
         return NULL;
     }
-    return NULL;
 }
 
 /* 
@@ -603,7 +705,7 @@ stmt = expr ";"
      | "return" expr ";"
 */
 Node *stmt() {
-    Node *node;
+    Node *node = NULL;
     LVar *lvar;
 
     // 変数宣言ならdeclare_varから返ってくる
@@ -632,7 +734,7 @@ Node *stmt() {
         return node;
     } else if (consume_kind(TK_RETURN)) {
         node = create_return_node();
-    } else {
+    } else if (!token_str(";")) {
         node = expr();
     }
 

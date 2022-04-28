@@ -16,6 +16,7 @@ assert(){
 		exit 1
 	fi
 }
+assert 100 testcase/test12.gc
 assert 122 testcase/test11.gc
 assert 10 testcase/test10.gc
 assert 0 testcase/test9.gc

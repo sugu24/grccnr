@@ -331,6 +331,7 @@ void gen_stmt(Node *node) {
 
 // 関数のジェネレータ
 void gen_func(Func *func) {
+    printf(".globl %s\n", func->func_type_name->name);
     printf("%s:\n", func->func_type_name->name);
 
     // プロローグ
@@ -453,6 +454,5 @@ void gen_global_var() {
         printf("  .string \"%s\"\n", glb_var->str);
     }
 
-    printf("\n.text\n");
-    printf(".globl main\n");
+    printf("\n.text\n\n");
 }

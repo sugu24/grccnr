@@ -14,7 +14,7 @@ int main() {
   int c; 
   two = 2;
   Num = 10;
-  bar(&b);
+  bar(b);
   a[two][two] = 3; 
   c = a[two][two] + b[2];
   return c + a[2][two] + b[2] + sizeof(a[1]) + Num; 

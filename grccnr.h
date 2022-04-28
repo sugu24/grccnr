@@ -21,6 +21,8 @@ typedef struct Typedef Typedef;
 typedef struct Struct Struct;
 typedef struct Enum Enum;
 typedef struct EnumMem  EnumMem;
+typedef struct Prototype Prototype;
+
 // ---------- global var ---------- //
 extern char *user_input;    // 入力プログラム
 extern Token *token;        // 現在着目しているトークン
@@ -31,6 +33,7 @@ extern LVar *strs;          // 文字リテラル
 extern Typedef *typedefs;   // typedefの連結リスト
 extern Struct *structs;     // structの連結リスト
 extern Enum *enums;         // enumの連結リスト
+extern Prototype *prototype;// funcのプロトタイプ
 extern LVar *func_locals[1024]; // 関数内のローカル変数
 extern char *arg_register[6][4]; // 引数を記憶するレジスタ
 
@@ -54,6 +57,7 @@ typedef enum {
     TK_TYPEDEF,  // typedef
     TK_STRUCT,   // struct
     TK_ENUM,     // enum
+    TK_INCLUDE,  // include
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -181,6 +185,12 @@ struct EnumMem {
     int len;
 };
 
+// prototypeの型
+struct Prototype {
+    Prototype *next;
+    Func *func;
+};
+
 // ---------- error ---------- //
 void error(char *fmt, ...);
 void error_at(char *loc, char *fmt, ...);
@@ -207,6 +217,8 @@ Node *new_char(char c);
 LVar *find_lvar(Token *tok);
 char *str_copy(Token *tok);
 LVar *declare_var(int type);
+Func *same_prototype(Func *func);
+Func *same_function(Func *func);
 
 Node *create_if_node(int con, int chain);
 Node *create_else_node(int con, int chain);
@@ -237,6 +249,11 @@ VarType *AST_type(int ch, Node *node);
 int get_size(VarType *type);
 VarType *get_type(VarType *type);
 int get_offset(Node *node);
+VarType *func_type(Node *node);
+int same_type(VarType *v1, VarType *v2);
 
 // ---------- 初期化 ---------- //
 Node *initialize(int type, VarType *var_type, Node *lvar_node);
+
+// ---------- main ---------- //
+char *read_file(char *path);
