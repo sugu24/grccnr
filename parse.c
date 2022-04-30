@@ -611,6 +611,18 @@ LVar *declare_var(int type) {
     error_at(token->str, "文の末尾は ; である必要があります");
 }
 
+// ++ -- の処理
+Node *add_add_minus_minus(Node *node) {
+    if (consume("++")) {
+        node->access = 1;
+        node = new_binary(ND_LVAR_ADD, node, NULL);
+    } else if (consume("--")) {
+        node->access = 1;
+        node = new_binary(ND_LVAR_SUB, node, NULL);
+    } 
+    return node;
+}
+
 // ---------- parser ---------- //
 // program = stmt*
 void program() {
@@ -763,6 +775,7 @@ Node *expr() {
 // assign = equality ("=" assign)?
 Node *assign() {
     Node *node = equality();
+    
     if (consume("=")) 
         node = new_binary(ND_ASSIGN, node, assign());
     return node;
@@ -873,9 +886,8 @@ Node *primary() {
     
     if (tok = consume_kind(TK_IDENT)) {
         // 変数か関数
-        node = calloc(1, sizeof(Node));
         if (consume("(")) { // 関数の場合
-            node->kind = ND_CALL_FUNC;
+            node = new_node(ND_CALL_FUNC);
             node->func_name = str_copy(tok);
             if (!consume(")")){
                 int i;
@@ -891,7 +903,7 @@ Node *primary() {
                 }
             }
         } else { // 変数の場合
-            node->kind = ND_LVAR;
+            node = new_node(ND_LVAR);
             
             // 変数,enumの順番
             if (node->lvar = find_lvar(tok)) {}            
@@ -903,6 +915,9 @@ Node *primary() {
             // 既存の変数
             if (!node->lvar->glb_var)
                 node->offset = node->lvar->offset;
+            
+            // ++ -- の処理
+            node = add_add_minus_minus(node);
 
             node = attach(node);
         }

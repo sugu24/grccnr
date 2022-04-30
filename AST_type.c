@@ -272,6 +272,10 @@ VarType *AST_type(int ch, Node *node) {
             if (rsize >= 8 && lsize < rsize)
                 error_at(token->str, "右辺より左辺の方がサイズが小さいです");
             return rhs_var_type;
+        case ND_LVAR_ADD:
+            return AST_type(ch, node->lhs);
+        case ND_LVAR_SUB:
+            return AST_type(ch, node->lhs);
         case ND_LVAR:
             return node->lvar->type;
         case ND_MEMBAR:

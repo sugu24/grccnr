@@ -100,6 +100,8 @@ typedef enum {
     ND_INDEX,   // 25 []
     ND_MEMBAR,  // 26 メンバ変数
     ND_MEMBAR_ACCESS, // 27 struct.membar
+    ND_LVAR_ADD, // ++
+    ND_LVAR_SUB, // --
 } NodeKind;
 
 // 変数の型
