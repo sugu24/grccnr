@@ -76,29 +76,30 @@ typedef enum {
 	ND_SUB,    // 1 -
 	ND_MUL,    // 2 *
 	ND_DIV,    // 3 /
-	ND_NUM,    // 4 整数
-    ND_ADDR,   // 5 &var
-    ND_DEREF,  // 6 *var
-	ND_EQ,     // 7 ==
-	ND_NE,     // 8 !=
-	ND_LT,     // 9 <
-	ND_LE,     // 10 <=
-    ND_ASSIGN, // 11= 
-    ND_LVAR,   // 12 ローカル変数
-    ND_RETURN, // 13 return
-    ND_IF,     // 14 if
-    ND_ELSE_IF,// 15 else if
-    ND_ELSE,   // 16 else
-    ND_WHILE,  // 17 while
-    ND_FOR,    // 18 for
-    ND_BLOCK,  // 19 block文
-    ND_CALL_FUNC, // 20 関数呼び出し
-    ND_STR_PTR, // 21 文字列のポインタ
-    ND_STR,     // 22 文字リテラル
-    ND_CHAR,    // 23 1文字
-    ND_INDEX,   // 24 []
-    ND_MEMBAR,  // 25 メンバ変数
-    ND_MEMBAR_ACCESS, // struct.membar
+    ND_MOD,    // 4 %
+	ND_NUM,    // 5 整数
+    ND_ADDR,   // 6 &var
+    ND_DEREF,  // 7 *var
+	ND_EQ,     // 8 ==
+	ND_NE,     // 9 !=
+	ND_LT,     // 10 <
+	ND_LE,     // 11 <=
+    ND_ASSIGN, // 12= 
+    ND_LVAR,   // 13 ローカル変数
+    ND_RETURN, // 14 return
+    ND_IF,     // 15 if
+    ND_ELSE_IF,// 16 else if
+    ND_ELSE,   // 17 else
+    ND_WHILE,  // 18 while
+    ND_FOR,    // 19 for
+    ND_BLOCK,  // 20 block文
+    ND_CALL_FUNC, // 21 関数呼び出し
+    ND_STR_PTR, // 22 文字列のポインタ
+    ND_STR,     // 23 文字リテラル
+    ND_CHAR,    // 24 1文字
+    ND_INDEX,   // 25 []
+    ND_MEMBAR,  // 26 メンバ変数
+    ND_MEMBAR_ACCESS, // 27 struct.membar
 } NodeKind;
 
 // 変数の型

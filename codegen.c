@@ -307,6 +307,11 @@ void gen_stmt(Node *node) {
 			printf("  cqo\n");
 			printf("  idiv rdi\n");
 			break;
+        case ND_MOD:
+            printf("  cqo\n");
+            printf("  idiv rdi\n");
+            printf("  mov rax, rdx\n");
+            break;
 		case ND_EQ:
 			printf("  cmp rax, rdi\n");
 			printf("  sete al\n");
@@ -378,6 +383,11 @@ void gen_initialize_global_var(Node *node) {
         case ND_DIV:
             gen_initialize_global_var(node->lhs);
             printf(" / ");
+            gen_initialize_global_var(node->rhs);
+            return;
+        case ND_MOD:
+            gen_initialize_global_var(node->lhs);
+            printf(" % ");
             gen_initialize_global_var(node->rhs);
             return;
         case ND_NUM:

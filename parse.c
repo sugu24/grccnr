@@ -822,6 +822,8 @@ Node *mul() {
 			node = new_binary(ND_MUL, node, unary());
 		else if (consume("/"))
 			node = new_binary(ND_DIV, node, unary());
+        else if (consume("%"))
+            node = new_binary(ND_MOD, node, unary());
 		else
 			return node;
 	}

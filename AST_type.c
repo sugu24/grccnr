@@ -184,6 +184,18 @@ VarType *AST_type(int ch, Node *node) {
                 rhs_var_type->ty == STRUCT)
                 error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
             return lhs_var_type;
+        case ND_MOD:
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
+            if (lhs_var_type->ty == ARRAY  ||
+                lhs_var_type->ty == PTR    ||
+                lhs_var_type->ty == STRUCT)
+                error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
+            if (rhs_var_type->ty == ARRAY  ||
+                rhs_var_type->ty == PTR    ||
+                rhs_var_type->ty == STRUCT)
+                error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
+            return lhs_var_type;
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
