@@ -10,6 +10,7 @@ int arg_check(Func *func, Node *node) {
         if (!node->arg[argc1] && !arg) return 1;
         else if (!(node->arg[argc1] && arg)) return 0;
 
+        // same_type(AST_type(呼び出し元, 関数引数定義))
         if (!same_type(AST_type(0, node->arg[argc1]), arg->type)) return 0;
         
         argc1++;

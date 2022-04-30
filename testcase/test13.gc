@@ -1,0 +1,7 @@
+int main() {
+  char *s = "abc def\n";
+  while (*s) {
+    printf("%c", *s);
+    s = s + 1;
+  }
+}

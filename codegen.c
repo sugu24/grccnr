@@ -39,17 +39,19 @@ int gen_arg_push(LVar *arg) {
     printf("  sub rax, %d\n", arg->offset);
 
     // arg->typeに合わせてレジスタを選択
-    switch (get_size(arg->type)) {
-        case 1:
+    switch (arg->type->ty) {
+        case CHAR:
             printf("  mov [rax], %s\n", arg_register[argc][3]);
             break;
-        case 2:
+        case 100:
             printf("  mov [rax], %s\n", arg_register[argc][2]);
             break;
-        case 4:
+        case INT:
             printf("  mov [rax], %s\n", arg_register[argc][1]);
             break;
-        case 8:
+        case STRUCT:
+            error("関数の引数に構造体は未定義です");
+        default:
             printf("  mov [rax], %s\n", arg_register[argc][0]);
             break;
     }

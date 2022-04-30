@@ -663,6 +663,16 @@ Func *glbstmt() {
                 error_at(token->str, "引数が7つ以上に対応していません");
             
             if (arg_var = declare_var(0)) {
+                if (arg_var->type->ty == STRUCT) error_at(token->str, "関数の引数に構造体はまだ処理できません");
+                
+                VarType *temp_type = arg_var->type;
+                while (temp_type->ty == ARRAY) {
+                    // 配列の場合はポインタに変換(配列のアドレスをもらうため) 
+                    temp_type->ty = PTR;
+                    temp_type->array_size = 0;
+                    temp_type = temp_type->ptr_to;
+                }
+
                 arg_var->next = locals;
                 locals = arg_var;
             }
@@ -893,6 +903,10 @@ Node *primary() {
                 return enum_mem_node;
             else error_at(tok->str, "宣言されていない変数です");
 
+            
+            // ARRAYならアドレスを表す
+            if (node->lvar->type->ty == ARRAY)
+                node->access = 1;
                 
             // 既存の変数
             if (!node->lvar->glb_var)
@@ -935,6 +949,7 @@ Node *attach(Node *node) {
             expect("]");
             if (node->lhs->lhs->kind != ND_LVAR || node->lhs->lhs->lvar->type->ty != PTR)
                 node->lhs->lhs->access = 1;
+            type = type->ptr_to;
         }
         else if (consume(".")) {
             if (type->ty != STRUCT)
