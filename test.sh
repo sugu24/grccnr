@@ -16,6 +16,8 @@ assert(){
 		exit 1
 	fi
 }
+
+assert 29 testcase/test13.gc
 assert 100 testcase/test12.gc
 assert 122 testcase/test11.gc
 assert 10 testcase/test10.gc
@@ -30,6 +32,8 @@ assert 34 testcase/test2.gc
 assert 0 testcase/test4.gc
 assert 100 testcase/end.gc
 
+assert 0 'int f(int *a) { int i; for (i = 0; i < 4; i = i + 1) printf("%d \n", a[i]); } int main() { int a[4]; int i; for (i = 0; i < 4; i = i + 1) a[i] = i; f(a); }'
+assert 0 'int f(int a[4]) { int i; for (i = 0; i < 4; i = i + 1) printf("%d \n", a[i]); } int main() { int a[4]; int i; for (i = 0; i < 4; i = i + 1) a[i] = i; f(a); }'
 assert 1 'int main() { int a[4][3]; a[3][2] = 1; return a[3][2]; }'
 
 assert 97 'int main() { char a; char b[3]; b[0] = 97; a = b[0]; return a; }'

@@ -778,6 +778,16 @@ Node *assign() {
     
     if (consume("=")) 
         node = new_binary(ND_ASSIGN, node, assign());
+    else if (consume("+="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_ADD, node, assign()));
+    else if (consume("-="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_SUB, node, assign()));
+    else if (consume("*="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_MUL, node, assign()));
+    else if (consume("/="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_DIV, node, assign()));
+    else if (consume("%="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_MOD, node, assign()));
     return node;
 }
 
