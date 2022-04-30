@@ -146,7 +146,7 @@ void prototype_arg(Func *func, Func *proto_func) {
         if (!proto_arg && !func_arg) break;
         else if (!(proto_arg && func_arg)) 
             error("関数%sの関数宣言との引数の個数が異なります", func->func_type_name->name);
-        printf("%s\n", token->str);
+
         if (!same_type(proto_arg->type, func_arg->type))
             error("関数 %s の引数 %s の型が関数宣言時の変数 %s の型と異なります", func->func_type_name->name, func_arg->name, func_arg->name);
         
@@ -208,25 +208,6 @@ Node *create_block_node() {
         cur_node->next_stmt = NULL;
     }
     return head_node;
-}
-
-// include 
-void include() {
-    Token *tok;
-    char *temp, *filename;
-    if (tok = consume_kind(TK_STR)) {
-        filename = str_copy(tok);
-        temp = user_input;
-        tok = token;
-	    user_input = read_file(filename);
-        token = tokenize();
-	    program();
-        user_input = temp;
-        token = tok;
-    }
-    else {
-        error_at(token->str, "ファイル名である必要があります");
-    }
 }
 
 // ---------- if or else if or else ---------- //
@@ -442,6 +423,25 @@ char *str_copy(Token *tok) {
     strncpy(temp, tok->str, tok->len);
     temp[tok->len] = '\0';
     return temp;
+}
+
+// include 
+void include() {
+    Token *tok;
+    char *temp, *filename;
+    if (tok = consume_kind(TK_STR)) {
+        filename = str_copy(tok);
+        temp = user_input;
+        tok = token;
+	    user_input = read_file(filename);
+        token = tokenize();
+	    program();
+        user_input = temp;
+        token = tok;
+    }
+    else {
+        error_at(token->str, "ファイル名である必要があります");
+    }
 }
 
 // 原始的な型かどうか
@@ -880,14 +880,8 @@ Node *primary() {
                 for (i = 0; ; i++) {
                     if (i == 6)
                         error_at(token->str, "引数の個数は7個以上に対応していません");
-
-                    node->arg[i] = expr();
                     
-                    // 文字列の場合はアドレスを関数に渡す
-                    var_type = AST_type(0, node->arg[i]);
-                    if (var_type->ty == ARRAY && get_type(var_type)->ty == CHAR) {
-                        node->arg[i]->access = 1;
-                    }                    
+                    node->arg[i] = expr();
                     
                     if (consume(",")) {} // 次の引数がある
                     else if (consume(")")) break; // 引数終了
@@ -897,16 +891,12 @@ Node *primary() {
         } else { // 変数の場合
             node->kind = ND_LVAR;
             
-            // 変数->enumの順番
+            // 変数,enumの順番
             if (node->lvar = find_lvar(tok)) {}            
             else if (enum_mem_node = find_enum_membar(tok))
                 return enum_mem_node;
-            else error_at(tok->str, "宣言されていない変数です");
-
-            
-            // ARRAYならアドレスを表す
-            if (node->lvar->type->ty == ARRAY)
-                node->access = 1;
+            else 
+                error_at(tok->str, "宣言されていない変数です");
                 
             // 既存の変数
             if (!node->lvar->glb_var)
@@ -945,38 +935,40 @@ Node *attach(Node *node) {
     // (assign), ->membar, .membar, [assign] の繰り返し
 	while (true) {
         if (consume("[")) {
+            if (type->ty == ARRAY)
+                node->access = 1;
+            if (type->ty != PTR && type->ty != ARRAY)
+                error_at(token->str, "ポインタか配列に添え字を付けてください");
             node = new_binary(ND_INDEX, new_binary(ND_ADD, node, assign()), NULL);
             expect("]");
-            if (node->lhs->lhs->kind != ND_LVAR || node->lhs->lhs->lvar->type->ty != PTR)
-                node->lhs->lhs->access = 1;
             type = type->ptr_to;
         }
         else if (consume(".")) {
             if (type->ty != STRUCT)
-                error_at(token->str, "左の候がstructでありません");
+                error_at(token->str, "左の候がstructでははありません");
             if (!(tok = consume_kind(TK_IDENT)))
                 error_at(token->str, "メンバ変数である必要があります");
             if (!(lvar = get_membar(type->struct_p, tok)))
                 error_at(token->str, "メンバ変数である必要があります");
+            node->access = 1;
             mem_node = new_node(ND_MEMBAR);
             mem_node->lvar = lvar;
             node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
             type = lvar->type;
-            node->lhs->lhs->access = 1;
         }
         else if (consume("->")) {
             if (type->ty != PTR || type->ptr_to->ty != STRUCT)
-                error_at(token->str, "左の候がstructでありません");
+                error_at(token->str, "左の候がstructのポインタではありません");
             if (!(tok = consume_kind(TK_IDENT)))
                 error_at(token->str, "メンバ変数である必要があります");
             if (!(lvar = get_membar(type->ptr_to->struct_p, tok)))
                 error_at(token->str, "メンバ変数である必要があります");
+            node->access = 1;
             mem_node = new_node(ND_MEMBAR);
             mem_node->lvar = lvar;
             node = new_binary(ND_DEREF, node, NULL);
             node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
             type = lvar->type;
-            node->lhs->lhs->lhs->access = 1;
         }
         else
             break;

@@ -247,7 +247,9 @@ void gen_stmt(Node *node) {
             return;
         case ND_INDEX:
             gen_stmt(node->lhs);
-            if (!node->access) {
+            if (!node->access &&
+                AST_type(0, node->lhs)->ptr_to->ty != ARRAY) {
+                // ポインタに添え字がついていて添え字がlastか配列の途中出ない場合
                 printf("  pop rax\n");
                 mov_rax_data(node);
                 printf("  push rax\n");

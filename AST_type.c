@@ -23,7 +23,7 @@ int same_type(VarType *v1, VarType *v2) {
         if ((v1->ty == ARRAY && v2->ty == PTR) || (v1->ty == PTR && v2->ty == ARRAY)) {}
         else if (v1->ty != v2->ty) return 0;
         else if (v1->ty == STRUCT && get_size(v1) != get_size(v2)) return 0;
-        
+
         if (v1->ptr_to && v2->ptr_to) {
             v1 = v1->ptr_to;
             v2 = v2->ptr_to;
@@ -44,7 +44,7 @@ VarType *func_type(Node *node) {
             arg_check(code[i], node))
             return code[i]->func_type_name->type;
     }
-
+    
     // prototypeで宣言された関数
     for (Prototype *proto = prototype; proto; proto = proto->next) {
         if (strcmp(proto->func->func_type_name->name, node->func_name) == 0 &&
@@ -52,12 +52,12 @@ VarType *func_type(Node *node) {
             return proto->func->func_type_name->type;
         }
     }
-
+    
     // 定義途中の関数
     if (strcmp(now_func->func_type_name->name, node->func_name) == 0 && 
         arg_check(now_func, node)) 
         return now_func->func_type_name->type;
-    
+        
     // printfはlink.cのstdio.hを使う
     if (strcmp("printf", node->func_name) == 0) {
         VarType *p = calloc(1, sizeof(VarType));
@@ -71,6 +71,7 @@ VarType *func_type(Node *node) {
         p->ptr_to = calloc(1, sizeof(VarType));
         return p;
     }
+    
     error_at(token->str, "一致する関数がありません");
 }
 
@@ -105,9 +106,8 @@ int get_size(VarType *type) {
             res = type->array_size * get_size(type->ptr_to);
             break;
         case STRUCT:
-            for (LVar *var = type->struct_p->membar; var; var = var->next) {
+            for (LVar *var = type->struct_p->membar; var; var = var->next)
                 res += get_size(var->type);
-            }
             break;
         default:
             error_at(token->str, "型が処理できません");
@@ -208,8 +208,7 @@ VarType *AST_type(int ch, Node *node) {
         case ND_ADDR:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = PTR;
-            var_type->ptr_to = calloc(1, sizeof(VarType));
-            var_type->ptr_to->ty = AST_type(ch, node->lhs)->ty;
+            var_type->ptr_to = AST_type(ch, node->lhs);
             return var_type;
         case ND_DEREF:
             var_type = AST_type(ch, node->lhs);
@@ -262,7 +261,6 @@ VarType *AST_type(int ch, Node *node) {
                 error_at(token->str, "右辺より左辺の方がサイズが小さいです");
             return rhs_var_type;
         case ND_LVAR:
-            
             return node->lvar->type;
         case ND_MEMBAR:
             return node->lvar->type;
@@ -285,7 +283,8 @@ VarType *AST_type(int ch, Node *node) {
         case ND_BLOCK:
             return AST_type(ch, node->next_stmt);
         case ND_CALL_FUNC:
-            return func_type(node);
+            lhs_var_type = func_type(node);
+            return lhs_var_type;
         default:
             error_at(token->str, "予期しないNodeKindです");
         
