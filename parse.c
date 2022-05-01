@@ -47,9 +47,9 @@ Typedef *new_typedef(VarType *type, char *name, int len) {
 }
 
 // 変数を名前で検索する　見つからないならNULLを返す
-LVar *find_lvar(Token *tok) {
+LVar *find_lvar(int local, Token *tok) {
     // ローカル変数
-    for (LVar *var = locals; var; var = var->next) {
+    for (LVar *var = locals; var && local; var = var->next) {
         if (tok->len == var->len && 
             !memcmp(tok->str, var->name, var->len))
             return var;
@@ -548,7 +548,7 @@ LVar *declare_var(int type) {
         }
         error_at(token->str, "宣言する変数名がありません");
     }
-    if (find_lvar(tok_var_name)) 
+    if (find_lvar(0, tok_var_name)) 
         error_at(tok_var_name->str, "既に宣言された変数名です");
     
     lvar->name = str_copy(tok_var_name);
@@ -889,6 +889,7 @@ Node *primary() {
 
     // 次のトークンが"("なら、"(" expr ")"
     while (consume("(")) {
+        // printf("-----------\n");
         node = assign();
         expect(")");
         return attach(node);
@@ -916,7 +917,7 @@ Node *primary() {
             node = new_node(ND_LVAR);
             
             // 変数,enumの順番
-            if (node->lvar = find_lvar(tok)) {}            
+            if (node->lvar = find_lvar(1, tok)) {}            
             else if (enum_mem_node = find_enum_membar(tok))
                 return enum_mem_node;
             else 

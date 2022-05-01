@@ -2,24 +2,27 @@
 
 // 関数の引数の個数が一致していたら1
 int arg_check(Func *func, Node *node) {
-    int argc1 = 0;
+    int argc = 0;
+    while (node->arg[argc]) argc++;
+    
     LVar *arg = func->arg;
 
     while (1) {
         // argの比較
-        if (!node->arg[argc1] && !arg) return 1;
-        else if (!(node->arg[argc1] && arg)) return 0;
+        if (!node->arg[argc-1] && !arg) return 1;
+        else if (!(node->arg[argc-1] && arg)) return 0;
 
         // same_type(AST_type(呼び出し元, 関数引数定義))
-        if (!same_type(AST_type(0, node->arg[argc1]), arg->type)) return 0;
+        if (!same_type(AST_type(0, node->arg[argc-1]), arg->type)) return 0;
         
-        argc1++;
+        argc--;
         arg = arg->next;
     }
 }
 
 int same_type(VarType *v1, VarType *v2) {
     while (1) {
+        //printf("v1 %d v2 %d\n", v1->ty, v2->ty);
         if ((v1->ty == ARRAY && v2->ty == PTR) || (v1->ty == PTR && v2->ty == ARRAY)) {}
         else if (v1->ty != v2->ty) return 0;
         else if (v1->ty == STRUCT && get_size(v1) != get_size(v2)) return 0;
@@ -40,16 +43,21 @@ int same_type(VarType *v1, VarType *v2) {
 VarType *func_type(Node *node) {
     // 定義済みの関数
     for (int i = 0; code[i]; i++) {
-        if (strcmp(code[i]->func_type_name->name, node->func_name) == 0 &&
-            arg_check(code[i], node))
-            return code[i]->func_type_name->type;
+        if (strcmp(code[i]->func_type_name->name, node->func_name) == 0) {
+            if (arg_check(code[i], node))
+                return code[i]->func_type_name->type;
+            else
+                error_at(token->str, "引数が異なります");
+        }
     }
     
     // prototypeで宣言された関数
     for (Prototype *proto = prototype; proto; proto = proto->next) {
-        if (strcmp(proto->func->func_type_name->name, node->func_name) == 0 &&
-            arg_check(proto->func, node)) {
-            return proto->func->func_type_name->type;
+        if (strcmp(proto->func->func_type_name->name, node->func_name) == 0) {
+            if (arg_check(proto->func, node)) 
+                return proto->func->func_type_name->type;
+            else
+                error_at(token->str, "引数の型が異なります");
         }
     }
     
@@ -69,6 +77,12 @@ VarType *func_type(Node *node) {
         VarType *p = calloc(1, sizeof(VarType));
         p->ty= PTR;
         p->ptr_to = calloc(1, sizeof(VarType));
+        return p;
+    }
+    // strncmpはlink.cのstring.hを使う
+    if (strcmp("strncmp", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= INT;
         return p;
     }
     
@@ -271,7 +285,7 @@ VarType *AST_type(int ch, Node *node) {
             rsize = get_size(get_type(rhs_var_type));
             if (rsize >= 8 && lsize < rsize)
                 error_at(token->str, "右辺より左辺の方がサイズが小さいです");
-            return rhs_var_type;
+            return lhs_var_type;
         case ND_LVAR_ADD:
             return AST_type(ch, node->lhs);
         case ND_LVAR_SUB:
@@ -321,7 +335,7 @@ VarType *AST_type(int ch, Node *node) {
         return lhs_var_type;
     } 
     
-    if ((lt == INT || lt == CHAR) && (rt == INT || lt == CHAR))
+    if ((lt == INT || lt == CHAR) && (rt == INT || rt == CHAR))
         return lhs_var_type;
     
     if (lt == PTR && (rt == CHAR || rt == INT))  {

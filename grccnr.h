@@ -217,7 +217,7 @@ Node *new_node(NodeKind kind);
 Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
 Node *new_num(int val);
 Node *new_char(char c);
-LVar *find_lvar(Token *tok);
+LVar *find_lvar(int local, Token *tok);
 char *str_copy(Token *tok);
 LVar *declare_var(int type);
 Func *same_prototype(Func *func);

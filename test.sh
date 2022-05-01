@@ -17,20 +17,20 @@ assert(){
 	fi
 }
 
-assert 29 testcase/test13.gc
-assert 100 testcase/test12.gc
-assert 122 testcase/test11.gc
-assert 10 testcase/test10.gc
-assert 0 testcase/test9.gc
-assert 2 testcase/test8.gc
-assert 0 testcase/test7.gc
-assert 0 testcase/test6.gc
-assert 0 testcase/test5.gc
-assert 0 testcase/test1.gc
-assert 11 testcase/test3.gc
-assert 34 testcase/test2.gc
-assert 0 testcase/test4.gc
-assert 100 testcase/end.gc
+#assert 53 testcase/test13.gc
+#assert 100 testcase/test12.gc
+#assert 122 testcase/test11.gc
+#assert 10 testcase/test10.gc
+#assert 0 testcase/test9.gc
+#assert 2 testcase/test8.gc
+#assert 0 testcase/test7.gc
+#assert 0 testcase/test6.gc
+#assert 0 testcase/test5.gc
+#assert 0 testcase/test1.gc
+#assert 11 testcase/test3.gc
+#assert 34 testcase/test2.gc
+#assert 0 testcase/test4.gc
+#assert 100 testcase/end.gc
 
 assert 0 'int f(int *a) { int i; for (i = 0; i < 4; i = i + 1) printf("%d \n", a[i]); } int main() { int a[4]; int i; for (i = 0; i < 4; i = i + 1) a[i] = i; f(a); }'
 assert 0 'int f(int a[4]) { int i; for (i = 0; i < 4; i = i + 1) printf("%d \n", a[i]); } int main() { int a[4]; int i; for (i = 0; i < 4; i = i + 1) a[i] = i; f(a); }'
@@ -114,7 +114,6 @@ assert 21 'int bar2(int a,int b) { return a + b; } int bar3(int a,int b,int c) {
 #assert 42 '42;'
 #assert 41 ' 12 + 34 - 5; '
 #assert 15 '5*(9-6);'
-assert 4 'int main() { return (3 + --5) / 2; }'
 assert 4 'int main() { return (14 + -5) / 2; }'
 #assert 38 '-(10--9)*-2;'
 #assert 10 '- -10;'

@@ -48,7 +48,7 @@ Node *init_global_string(Token *tok, VarType *var_type, Node *lvar_node) {
 }
 
 Node *init_value(Node *lvar_node) {
-    Node *node = new_binary(ND_ASSIGN, lvar_node, expr());
+    Node *node = new_binary(ND_ASSIGN, lvar_node, assign());
     AST_type(1, node);
     return node;
 }

@@ -1,0 +1,119 @@
+#include "app/dict.gh"
+
+// keyの長さを返す
+int key_len(char *key) {
+    int len = 0;
+    while (*key) {
+        len++;
+        key++;
+    }
+    return len;
+}
+
+// keyに対してハッシュ値を計算して返す
+int hash_number(char *key, int table_len) {
+    int hash = 0;
+    while (*key) {
+        hash = (hash * 29) + *key;
+        hash %= table_len;
+        key++;
+    }
+    return hash;
+}
+
+// ヒープ領域に連想配列分の領域を確保してそれをセットする
+int create_dict(DictItem **dict, int table_len) {
+    *dict = calloc(table_len, sizeof(DictItem));
+}
+
+// keyのval_numをvalで更新する 成功:1 失敗:0 を返す
+int set_val_num(DictItem **dict, int table_len, char *key_s, int val) {
+    int key = hash_number(key_s, table_len);
+    int len = key_len(key_s);
+    DictItem *item;
+    for (item = (*dict + key); item; item = item->next) {
+        if (item->len + strncmp(item->key, key_s, len) == len) {
+            item->val_num = val;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// keyがあるか返す 成功:1 失敗:0 を返す
+int is_item(DictItem **dict, int table_len, char *key_s) {
+    int key = hash_number(key_s, table_len);
+    int len = key_len(key_s);
+    DictItem *item;
+    for (item = (*dict + key); item; item = item->next) {
+        if (item->len + strncmp(item->key, key_s, len) == len) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// keyのval_numを返す
+int get_val_num(DictItem **dict, int table_len, char *key_s) {
+    int key = hash_number(key_s, table_len);
+    int len = key_len(key_s);
+    DictItem *item;
+    for (item = (*dict + key); item; item = item->next) {
+        if (item->len + strncmp(item->key, key_s, len) == len) {
+            return item->val_num;
+        }
+    }
+    return 0;
+}
+
+// itemを追加
+int add_item(DictItem **dict, int table_len, char *key_s) {
+    int key = hash_number(key_s, table_len);
+    int len = key_len(key_s);
+    DictItem *item = (*dict + key);
+
+    while (item->next) item = item->next;
+    
+    item->key = key_s;
+    item->len = len;
+    item->next = calloc(1, sizeof(DictItem));
+    return 1;
+}
+
+
+//  使い方
+DictItem *dict;
+
+int main() {
+    int dict_size = 1;
+    create_dict(&dict, dict_size);
+    add_item(&dict, dict_size, "val");
+    add_item(&dict, dict_size, "var");
+    set_val_num(&dict, dict_size, "val", 4);
+    set_val_num(&dict, dict_size, "var", 5);
+    //printf("%d %d\n", hash_number("val", dict_size), hash_number("var", dict_size));
+
+    if (is_item(&dict, dict_size, "val")) {
+        printf("there is val\n");
+        int val = get_val_num(&dict, dict_size, "val");
+        printf("val = %d\n", val);
+    } 
+    else 
+        printf("there is not val\n");
+
+    if (is_item(&dict, dict_size, "var")) {
+        printf("there is var\n");
+        val = get_val_num(&dict, dict_size, "var");
+        printf("var = %d\n", val);
+    } 
+    else 
+        printf("there is not var\n");
+
+    if (is_item(&dict, dict_size, "val")) {
+        printf("there is val\n");
+        int val = get_val_num(&dict, dict_size, "val");
+        printf("val = %d\n", val);
+    } 
+    else 
+        printf("there is not val\n");
+}
