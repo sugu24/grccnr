@@ -122,12 +122,18 @@ Token *tokenize() {
             continue;
         }
 
-		if (startswith(p, "==") || startswith(p, "!=") ||
-			startswith(p, "<=") || startswith(p, ">=") || startswith(p, "->") || 
-            startswith(p, "++") || startswith(p, "--") ||
-            startswith(p, "+=") || startswith(p, "-=") ||
-            startswith(p, "*=") || startswith(p, "/=") ||
-            startswith(p, "%=")){
+        if (startswith(p, "===")) {
+            cur = new_token(TK_RESERVED, cur, p, 3);
+			p += 3;
+			continue;
+        }
+
+		if (startswith(p, "==") || startswith(p, "!=")  || 
+            startswith(p, "<=") || startswith(p, ">=")  ||
+            startswith(p, "->") || startswith(p, "++")  ||
+            startswith(p, "--") || startswith(p, "+=")  ||
+            startswith(p, "-=") || startswith(p, "*=")  ||
+            startswith(p, "/=") || startswith(p, "%=")){
 			cur = new_token(TK_RESERVED, cur, p, 2);
 			p += 2;
 			continue;

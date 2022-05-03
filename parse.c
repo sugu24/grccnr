@@ -528,8 +528,8 @@ VarType *new_var_type(int type) {
 // type: 0->arg 1->locals 2->global
 LVar *declare_var(int type) {
     Token *tok_var_name;
-    LVar *lvar = calloc(1, sizeof(LVar));
     VarType *array_top, *array_bfr, *array_now;
+    LVar *lvar = calloc(1, sizeof(LVar));
 
     // 変数の型
     lvar->type = new_var_type(type);
@@ -538,7 +538,6 @@ LVar *declare_var(int type) {
 
     // 変数名
     tok_var_name = consume_kind(TK_IDENT);
-
     if (!tok_var_name) {
         if (lvar->type->ty == STRUCT || lvar->type->enum_p) {
             // structかつvar_nameがない
@@ -555,7 +554,6 @@ LVar *declare_var(int type) {
     lvar->len = tok_var_name->len;
 
     // 関数ならreturn グローバル変数ならlvar->glb_var=1
-    // printf("%d %c\n", type, *token->str);
     if (type == 2) {
         if (token_str("("))
             return lvar;
@@ -582,12 +580,12 @@ LVar *declare_var(int type) {
         array_bfr->ptr_to = lvar->type;
         lvar->type = array_top->ptr_to;
     }
-
+    
     // 初期化ありローカル変数かグローバル変数
     Node *lvar_node = new_node(ND_LVAR);
     lvar_node->lvar = lvar;
 
-    if (type > 0 && consume("="))
+    if (type > 0 && consume("=")) 
         lvar->initial = initialize(type, lvar->type, lvar_node);
 
     int offset = get_size(lvar->type);
@@ -609,18 +607,6 @@ LVar *declare_var(int type) {
         return lvar;
 
     error_at(token->str, "文の末尾は ; である必要があります");
-}
-
-// ++ -- の処理
-Node *add_add_minus_minus(Node *node) {
-    if (consume("++")) {
-        node->access = 1;
-        node = new_binary(ND_LVAR_ADD, node, NULL);
-    } else if (consume("--")) {
-        node->access = 1;
-        node = new_binary(ND_LVAR_SUB, node, NULL);
-    } 
-    return node;
 }
 
 // ---------- parser ---------- //
@@ -662,7 +648,6 @@ Func *glbstmt() {
     else if (consume("(")) {
         if (var_or_func->initial)
             error_at(token->str, "変数の初期化後に ( は未定義です");
-
         func = calloc(1, sizeof(Func));
         func->func_type_name = var_or_func;
 
@@ -708,7 +693,7 @@ Func *glbstmt() {
             if (same_function(func))// 同じ名前の関数があればエラー
                 error_at(token->str, "関数名が重複しています");
             return func;
-        }       
+        }
     }
     // グローバル変数
     else {
@@ -729,16 +714,12 @@ stmt = expr ";"
 Node *stmt() {
     Node *node = NULL;
     LVar *lvar;
-
     // 変数宣言ならdeclare_varから返ってくる
     Typedef *typed = typedefs;
     if (lvar = declare_var(1)) {
         lvar->next = locals;
         locals = lvar;
-        if (lvar->initial)
-            return lvar->initial;
-        else 
-            return NULL;
+        return lvar->initial;
     } else if (typed != typedefs)
         return NULL;
 
@@ -852,6 +833,24 @@ Node *mul() {
 	}
 }
 
+Node *sizeof_val() {
+    VarType *var_type;
+    Token *tok = token;
+
+    // sizeof(int,struct ...) or sizeof(変数)に対応
+    if (consume("(")) {
+        if (var_type = new_var_type(0)) {
+            expect(")");
+            return new_num(get_size(var_type));
+        }
+    }
+    token = tok;
+    Node *node = unary();
+    if (node->kind == ND_STR_PTR)
+        node->kind = ND_STR;
+    return new_num(get_size(AST_type(1, node)));
+}
+
 Node *unary() {
 	if (consume("+"))
 		return unary();
@@ -861,23 +860,8 @@ Node *unary() {
         return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&"))
         return new_binary(ND_ADDR, unary(), NULL);
-    else if (consume_kind(TK_SIZEOF)) {
-        VarType *var_type;
-        Token *tok = token;
-
-        // sizeof(int or struct ...) or sizeof(変数)に対応
-        if (consume("(")) {
-            if (var_type = new_var_type(0)) {
-                expect(")");
-                return new_num(get_size(var_type));
-            }
-        }
-        token = tok;
-        Node *node = unary();
-        if (node->kind == ND_STR_PTR)
-            node->kind = ND_STR;
-        return new_num(get_size(AST_type(1, node)));
-    }
+    else if (consume_kind(TK_SIZEOF)) 
+        return sizeof_val();
     return primary();
 }
 
@@ -889,7 +873,6 @@ Node *primary() {
 
     // 次のトークンが"("なら、"(" expr ")"
     while (consume("(")) {
-        // printf("-----------\n");
         node = assign();
         expect(")");
         return attach(node);
@@ -916,14 +899,14 @@ Node *primary() {
         } else { // 変数の場合
             node = new_node(ND_LVAR);
             
-            // 変数,enumの順番
+            // 変数,enumの順番で変数確認
             if (node->lvar = find_lvar(1, tok)) {}            
             else if (enum_mem_node = find_enum_membar(tok))
                 return enum_mem_node;
             else 
                 error_at(tok->str, "宣言されていない変数です");
                 
-            // 既存の変数
+            // offset設定
             if (!node->lvar->glb_var)
                 node->offset = node->lvar->offset;
             
@@ -952,6 +935,18 @@ Node *primary() {
 
     // 変数ではないなら数値
 	return new_num(expect_number());
+}
+
+// ++ -- の処理
+Node *add_add_minus_minus(Node *node) {
+    if (consume("++")) {
+        node->access = 1;
+        node = new_binary(ND_LVAR_ADD, node, NULL);
+    } else if (consume("--")) {
+        node->access = 1;
+        node = new_binary(ND_LVAR_SUB, node, NULL);
+    } 
+    return node;
 }
 
 Node *attach(Node *node) {

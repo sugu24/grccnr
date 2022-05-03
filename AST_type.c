@@ -16,6 +16,7 @@ int arg_check(Func *func, Node *node) {
         if (!same_type(AST_type(0, node->arg[argc-1]), arg->type)) return 0;
         
         argc--;
+        while (arg->next && arg->offset == arg->next->offset) arg = arg->next;
         arg = arg->next;
     }
 }
@@ -320,10 +321,6 @@ VarType *AST_type(int ch, Node *node) {
         
     }
 
-    //printf("kind=%d lhs_kind=%d rhs_kind=%d lhs_ty=%d rhs_ty=%d lhs_ptr=%d rhs_ptr=%d\n", 
-    //        node->kind, node->lhs->kind, node->rhs->kind, lhs_var_type->ty, rhs_var_type->ty,
-    //        lhs_var_type->ptrs, rhs_var_type->ptrs);
-    
     // 演算の場合
     // それぞれ指している値の意味が異なる場合
     // ptrs--してからsizeを取得 例) int*なら+4
@@ -338,32 +335,20 @@ VarType *AST_type(int ch, Node *node) {
     if ((lt == INT || lt == CHAR) && (rt == INT || rt == CHAR))
         return lhs_var_type;
     
-    if (lt == PTR && (rt == CHAR || rt == INT))  {
+    if ((lt == PTR || lt == ARRAY) && (rt == CHAR || rt == INT))  {
         node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
         return lhs_var_type;
     }
     
-    if ((lt == CHAR || lt == INT) && rt == PTR) {
+    if ((lt == CHAR || lt == INT) && (rt == PTR && rt == ARRAY)) {
         node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         return rhs_var_type;
     }
     
-    if (lt == ARRAY && (rt == CHAR || rt == INT)) {
-        node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
-        return lhs_var_type;
-    }
-    
-    if ((lt == CHAR || lt == INT) && rt == ARRAY) {
-        node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
-        return rhs_var_type;
-    }
-
     if (lt == STRUCT) {
         node->rhs->offset = get_membar_offset(node->rhs->lvar);
         return rhs_var_type;
     }
 
-    printf("%d %d\n", lt,rt);
-    error_at(token->str, "左辺の型と右辺の型との演算は出来ません");
     error_at(token->str, "左辺の型 %d と 右辺の型 %d との演算は出来ません", lt, rt);
 }

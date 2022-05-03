@@ -240,6 +240,7 @@ Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
+Node *add_add_minus_minus(Node *node);
 Node *attach(Node *node);
 // ---------- generator ---------- //
 void gen_func(Func *func);
