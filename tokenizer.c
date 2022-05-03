@@ -128,7 +128,8 @@ Token *tokenize() {
 			continue;
         }
 
-		if (startswith(p, "==") || startswith(p, "!=")  || 
+		if (startswith(p, "||") || startswith(p, "&&")  || 
+            startswith(p, "==") || startswith(p, "!=")  || 
             startswith(p, "<=") || startswith(p, ">=")  ||
             startswith(p, "->") || startswith(p, "++")  ||
             startswith(p, "--") || startswith(p, "+=")  ||
@@ -163,6 +164,17 @@ Token *tokenize() {
             }
             cur = new_token(TK_STR, cur, p, q-p);
             p = q+1;
+            continue;
+        }
+
+        // シングルクオートで記される文字
+        if (strchr("\'", *p)) {
+            p++;
+            cur = new_token(TK_ONE_CHAR, cur, p, 1);
+            p++;
+            if (!strchr("\'", *p))
+                error_at(p, "シングルクオートで囲む文字は1文字である必要があります");
+            p++;
             continue;
         }
 

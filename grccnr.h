@@ -58,6 +58,7 @@ typedef enum {
     TK_STRUCT,   // struct
     TK_ENUM,     // enum
     TK_INCLUDE,  // include
+    TK_ONE_CHAR, // 1文字
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -100,8 +101,10 @@ typedef enum {
     ND_INDEX,   // 25 []
     ND_MEMBAR,  // 26 メンバ変数
     ND_MEMBAR_ACCESS, // 27 struct.membar
-    ND_LVAR_ADD, // ++
-    ND_LVAR_SUB, // --
+    ND_LVAR_ADD, // 28 ++
+    ND_LVAR_SUB, // 29 --
+    ND_LOGICAL_ADD, // 30 ||
+    ND_LOGICAL_AND, // 31 &&
 } NodeKind;
 
 // 変数の型
@@ -234,6 +237,8 @@ Func *glbstmt();
 Node *stmt();
 Node *expr();
 Node *assign();
+Node *Ladd();
+Node *Land();
 Node *equality();
 Node *relational();
 Node *add();

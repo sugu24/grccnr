@@ -755,7 +755,7 @@ Node *expr() {
 
 // assign = equality ("=" assign)?
 Node *assign() {
-    Node *node = equality();
+    Node *node = Ladd();
     
     if (consume("=")) 
         node = new_binary(ND_ASSIGN, node, assign());
@@ -770,6 +770,30 @@ Node *assign() {
     else if (consume("%="))
         node = new_binary(ND_ASSIGN, node, new_binary(ND_MOD, node, assign()));
     return node;
+}
+
+// Ladd = Land ("||" Land)*
+Node *Ladd() {
+    Node *node = Land();
+
+    for (;;) {
+        if (consume("||"))
+            node = new_binary(ND_LOGICAL_ADD, node, Ladd());
+        else
+            return node;
+    }
+}
+
+// Land = equality ("&&" equality)*
+Node *Land() {
+    Node *node = equality();
+
+    for (;;) {
+        if (consume("&&"))
+            node = new_binary(ND_LOGICAL_AND, node, Land());
+        else
+            return node;
+    }
 }
 
 // equality = relational ("==" relational | "!=" relational)*
@@ -933,8 +957,12 @@ Node *primary() {
         return node;
     }
 
-    // 変数ではないなら数値
-	return new_num(expect_number());
+    if (tok = consume_kind(TK_ONE_CHAR))
+        return new_char(*(tok->str));
+    else if (tok = consume_kind(TK_NUM))
+        return new_num(tok->val);
+    
+    error_at(token->str, "処理できません");
 }
 
 // ++ -- の処理

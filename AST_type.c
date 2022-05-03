@@ -86,7 +86,37 @@ VarType *func_type(Node *node) {
         p->ty= INT;
         return p;
     }
-    
+    // fopenはlink.cのstring.hを使う
+    if (strcmp("fopen", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= PTR;
+        p->ptr_to = calloc(1, sizeof(VarType));
+        return p;
+    }
+    // fcloseはlink.cのstring.hを使う
+    if (strcmp("fclose", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= INT;
+        return p;
+    }
+    // fseekはlink.cのstring.hを使う
+    if (strcmp("fseek", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= INT;
+        return p;
+    }
+    // ftellはlink.cのstring.hを使う
+    if (strcmp("ftell", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= INT;
+        return p;
+    }
+    // freadはlink.cのstring.hを使う
+    if (strcmp("fread", node->func_name) == 0) {
+        VarType *p = calloc(1, sizeof(VarType));
+        p->ty= INT;
+        return p;
+    }
     error_at(token->str, "一致する関数がありません");
 }
 
@@ -211,6 +241,18 @@ VarType *AST_type(int ch, Node *node) {
                 rhs_var_type->ty == STRUCT)
                 error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
             return lhs_var_type;
+        case ND_LOGICAL_ADD:
+            AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = INT;
+            return var_type;
+        case ND_LOGICAL_AND:
+            AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = INT;
+            return var_type;
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;

@@ -324,6 +324,24 @@ void gen_stmt(Node *node) {
             printf("  idiv rdi\n");
             printf("  mov rax, rdx\n");
             break;
+        case ND_LOGICAL_ADD:
+            printf("  cmp rax, 0\n");
+            printf("  setne al\n");
+            printf("  movzb rax, al\n");
+            printf("  cmp rdi, 0\n");
+            printf("  setne dil\n");
+            printf("  movzb rdi, dil\n");
+            printf("  or rax, rdi\n");
+            break;
+        case ND_LOGICAL_AND:
+            printf("  cmp rax, 0\n");
+            printf("  setne al\n");
+            printf("  movzb rax, al\n");
+            printf("  cmp rdi, 0\n");
+            printf("  setne dil\n");
+            printf("  movzb rdi, dil\n");
+            printf("  and rax, rdi\n");
+            break;
 		case ND_EQ:
 			printf("  cmp rax, rdi\n");
 			printf("  sete al\n");
