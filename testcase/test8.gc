@@ -21,8 +21,10 @@ int main() {
   int c[2][4] = {{1,2,3,4}, {5,6,7,8}};
   int i; int j;
   for (i = 0; i < 2; i = i + 1) {
-    for (j = 0; j < 4; j = j + 1) {
-      printf("%d ", c[i][j]);
+    for (j = 0; j < 100; j = j + 1) {
+      if (j >= 4) { break; }
+      printf("%d(%d) ", c[i][j], j);
+      continue;
     }
     printf("\n");
   }
@@ -32,7 +34,7 @@ int main() {
   printf("sss[0]=abc->%s, sss[1]=def->%s, sss[1][1]=e->%c\n", sss[0], sss[1], sss[1][1]);
   
   printf("ssa=abc->%s\n", ssa);
-  printf("ss=abc->%s\n", ss);
+  printf("ss=aaa->%s\n", ss);
   printf("s[0]=abc->%s\n", s[0]);
   printf("s[1]=def->%s\n", s[1]);
   printf("s[1][1]=e->%c\n", s[1][1]);

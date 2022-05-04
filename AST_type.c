@@ -353,6 +353,10 @@ VarType *AST_type(int ch, Node *node) {
             error_at(token->str, "while節は評価出来ません");
         case ND_FOR:
             error_at(token->str, "for節は評価出来ません");
+        case ND_CONTINUE:
+            error_at(token->str, "continueは評価できません");
+        case ND_BREAK:
+            error_at(token->str, "breakは評価できません");
         case ND_BLOCK:
             return AST_type(ch, node->next_stmt);
         case ND_CALL_FUNC:

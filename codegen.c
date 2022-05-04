@@ -137,21 +137,21 @@ void gen_stmt(Node *node) {
 
             if (!node->next_if_else) { // if節単体の場合
                 printf("  push 0\n");
-                printf("  je .Lend%d\n", node->control);
+                printf("  je .Lendif%d\n", node->control);
                 gen_stmt(node->stmt);
             } else if (node->next_if_else->kind == ND_ELSE_IF) { //if節の次がelse ifの場合
                 printf("  je .Lelseif%d_1\n", node->control);
                 gen_stmt(node->stmt);
-                printf("  jmp .Lend%d\n", node->control);
+                printf("  jmp .Lendif%d\n", node->control);
                 gen_stmt(node->next_if_else);
             } else if (node->next_if_else->kind == ND_ELSE) { // if節の次がelse節の場合
-                printf("  je .Lelse%d\n", node->control);
+                printf("  je .Lelseif%d\n", node->control);
                 gen_stmt(node->stmt);
-                printf("  jmp .Lend%d\n", node->control);
+                printf("  jmp .Lendif%d\n", node->control);
                 gen_stmt(node->next_if_else);
             }
 
-            printf(".Lend%d:\n", node->control);
+            printf(".Lendif%d:\n", node->control);
             return;
         case ND_ELSE_IF:
             printf(".Lelseif%d_%d:\n", node->control, node->offset);
@@ -161,22 +161,22 @@ void gen_stmt(Node *node) {
 
             if (!node->next_if_else) { // else if節の次はない場合
                 printf("  push 0\n");
-                printf("  je .Lend%d\n", node->control);
+                printf("  je .Lendif%d\n", node->control);
                 gen_stmt(node->stmt);
             } else if (node->next_if_else->kind == ND_ELSE_IF) { // else if節の次がelse if節の場合
                 printf("  je .Lelseif%d_%d\n", node->control, node->offset+1);
                 gen_stmt(node->stmt);
-                printf("  jmp .Lend%d\n", node->control);
+                printf("  jmp .Lendif%d\n", node->control);
                 gen_stmt(node->next_if_else);
             } else if (node->next_if_else->kind == ND_ELSE) { // else if節の次がelse節の場合
-                printf("  je .Lelse%d\n", node->control);
+                printf("  je .Lelseif%d\n", node->control);
                 gen_stmt(node->stmt);
-                printf("  jmp .Lend%d\n", node->control);
+                printf("  jmp .Lendif%d\n", node->control);
                 gen_stmt(node->next_if_else);
             }
             return;
         case ND_ELSE:
-            printf(".Lelse%d:\n", node->control);
+            printf(".Lelseif%d:\n", node->control);
             gen_stmt(node->stmt);
             return;
         case ND_WHILE:
@@ -192,16 +192,23 @@ void gen_stmt(Node *node) {
             return;
         case ND_FOR:
             gen_pop(node->lhs);
-            printf(".Lbegin%d:\n", node->control);
+            printf(".Lcmp%d:\n", node->control);
             gen_stmt(node->mhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  je  .Lend%d\n", node->control);
             gen_pop(node->stmt);
+            printf(".Lbegin%d:\n", node->control);
             gen_pop(node->rhs);
-            printf("  jmp .Lbegin%d\n", node->control);
+            printf("  jmp .Lcmp%d\n", node->control);
             printf(".Lend%d:\n", node->control);
             printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
+            return;
+        case ND_CONTINUE:
+            printf("  jmp .Lbegin%d\n", node->control);
+            return;
+        case ND_BREAK:
+            printf("  jmp .Lend%d\n", node->control);
             return;
         case ND_RETURN:
             gen_stmt(node->lhs);

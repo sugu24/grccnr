@@ -204,6 +204,10 @@ Token *tokenize() {
                 cur = new_token(TK_ENUM, cur, p, len);
             else if (len == 7 && strncmp(p, "include", len) == 0)
                 cur = new_token(TK_INCLUDE, cur, p, len);
+            else if (len == 8 && strncmp(p, "continue", len) == 0)
+                cur = new_token(TK_CONTINUE, cur, p, len);
+            else if (len == 5 && strncmp(p, "break", len) == 0)
+                cur = new_token(TK_BREAK, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;

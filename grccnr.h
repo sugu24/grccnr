@@ -59,6 +59,8 @@ typedef enum {
     TK_ENUM,     // enum
     TK_INCLUDE,  // include
     TK_ONE_CHAR, // 1文字
+    TK_CONTINUE, // continue
+    TK_BREAK,    // break
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -105,6 +107,8 @@ typedef enum {
     ND_LVAR_SUB, // 29 --
     ND_LOGICAL_ADD, // 30 ||
     ND_LOGICAL_AND, // 31 &&
+    ND_CONTINUE,    // 32 continue
+    ND_BREAK,       //  33 break
 } NodeKind;
 
 // 変数の型

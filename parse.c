@@ -10,7 +10,9 @@ Struct *structs;
 Enum *enums;
 Prototype *prototype = NULL;
 
-int control = 0;
+int loop_control = 0;
+int if_control = 0;
+int looping = 0;
 int str_num = 0;
 
 Node *new_node(NodeKind kind) {
@@ -220,7 +222,7 @@ Node *create_if_node(int con, int chain) {
         node->offset = chain;
     } else {
         node = new_node(ND_IF);
-        con = node->control = control++;
+        con = node->control = if_control++;
     }
 
     if (!consume("("))
@@ -253,20 +255,24 @@ Node *create_else_node(int con, int chain) {
 // stmtがwhileの場合にBNFに沿ってNodeを生成して、Nodeを返す
 Node *create_while_node() {
     Node *node = new_node(ND_WHILE);
-    node->control = control++;
+    node->control = loop_control++;
     if (!consume("("))
         error_at(token->str, "'('でないトークンです");
     node->lhs = expr(); // 条件式
     if (!consume(")"))
         error_at(token->str, "')'でないトークンです");
+    
+    looping += 1;
     node->stmt = stmt();
+    looping -= 1;
+    
     return node;
 }
 
 // stmtがforの場合にBNFに沿ってNodeを生成して、Nodeを返す
 Node *create_for_node() {
     Node *node = new_node(ND_FOR);
-    node->control = control++;
+    node->control = loop_control++;
     if (!consume("("))
         error_at(token->str, "'('でないトークンです");
         
@@ -287,7 +293,11 @@ Node *create_for_node() {
         if (!consume(")"))
             error_at(token->str, "')'でないトークンです");
     }
+    
+    looping += 1;
     node->stmt = stmt();
+    looping -= 1;
+    
     return node;
 }
 
@@ -295,6 +305,20 @@ Node *create_for_node() {
 Node *create_return_node() {
     Node *node = new_node(ND_RETURN);
     node->lhs = expr();
+    return node;
+}
+
+Node *create_continue_node() {
+    if (!looping) error_at(token->str, "繰り返し構文内のみで continue は使用可能です");
+    Node *node = new_node(ND_CONTINUE);
+    node->control = loop_control - 1;
+    return node;
+}
+
+Node *create_break_node() {
+    if (!looping) error_at(token->str, "繰り返し構文内のみで break は使用可能です");
+    Node *node = new_node(ND_BREAK);
+    node->control = loop_control - 1;
     return node;
 }
 
@@ -629,6 +653,7 @@ Func *glbstmt() {
     LVar *var_or_func, *arg_var;
 
     if (consume("#")) {
+        // #include処理
         if (consume_kind(TK_INCLUDE))
             include();
         else
@@ -737,6 +762,10 @@ Node *stmt() {
         return node;
     } else if (consume_kind(TK_RETURN)) {
         node = create_return_node();
+    } else if (consume_kind(TK_CONTINUE)) {
+        node = create_continue_node();
+    } else if (consume_kind(TK_BREAK)) {
+        node = create_break_node();
     } else if (!token_str(";")) {
         node = expr();
     }
