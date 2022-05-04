@@ -7,6 +7,8 @@ VarType *cfunc_type(Node *node) {
         p->ty= INT;
         return p;
     }
+
+    // argc, argv + 1つの変数でscanfを実行するとsegment fault
     if (strcmp("scanf", node->func_name) == 0) {
         VarType *p = calloc(1, sizeof(VarType));
         p->ty = INT;
