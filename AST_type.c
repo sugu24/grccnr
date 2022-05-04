@@ -35,9 +35,7 @@ int same_type(VarType *v1, VarType *v2) {
             return 1;
         else 
             return 0;
-    
     }
-    
 }
 
 // 一致する関数の型を返す
@@ -67,56 +65,9 @@ VarType *func_type(Node *node) {
         arg_check(now_func, node)) 
         return now_func->func_type_name->type;
         
-    // printfはlink.cのstdio.hを使う
-    if (strcmp("printf", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
-    // callocはlink.cのstdlib.hを使う
-    if (strcmp("calloc", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= PTR;
-        p->ptr_to = calloc(1, sizeof(VarType));
-        return p;
-    }
-    // strncmpはlink.cのstring.hを使う
-    if (strcmp("strncmp", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
-    // fopenはlink.cのstring.hを使う
-    if (strcmp("fopen", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= PTR;
-        p->ptr_to = calloc(1, sizeof(VarType));
-        return p;
-    }
-    // fcloseはlink.cのstring.hを使う
-    if (strcmp("fclose", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
-    // fseekはlink.cのstring.hを使う
-    if (strcmp("fseek", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
-    // ftellはlink.cのstring.hを使う
-    if (strcmp("ftell", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
-    // freadはlink.cのstring.hを使う
-    if (strcmp("fread", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
+    VarType *cfunc = cfunc_type(node);
+    if (cfunc) return cfunc;
+
     error_at(token->str, "一致する関数がありません");
 }
 
