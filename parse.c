@@ -651,7 +651,7 @@ void program() {
 Func *glbstmt() {
     Func *func; // 関数の場合に仕様
     LVar *var_or_func, *arg_var;
-
+    
     if (consume("#")) {
         // #include処理
         if (consume_kind(TK_INCLUDE))
