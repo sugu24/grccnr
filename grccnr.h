@@ -116,6 +116,7 @@ typedef enum {
     ND_SWITCH,      // 34 switch
     ND_CASE,        // 35 case
     ND_DEFAULT,     // 36 default
+    ND_NOT,         // 37 not
 } NodeKind;
 
 // 変数の型

@@ -140,7 +140,7 @@ Token *tokenize() {
 			continue;
 		}
 
-		if (strchr("+-*/%()<>;={}&,[].#:", *p)) {
+		if (strchr("+-*/%()<>;={}&,[].#:!", *p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
 		}
@@ -221,7 +221,7 @@ Token *tokenize() {
             p += len;
             continue;
         }
-
+        printf("%d\n", *p);
 		error_at(p, "invalid token");
 	}
 	new_token(TK_EOF, cur, p, 0);

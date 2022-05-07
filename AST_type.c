@@ -274,6 +274,11 @@ VarType *AST_type(int ch, Node *node) {
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             return var_type;
+        case ND_NOT:
+            AST_type(ch, node->lhs);
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = INT;
+            return var_type;
         case ND_ASSIGN:
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);

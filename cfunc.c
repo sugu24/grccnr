@@ -1,62 +1,71 @@
 #include "grccnr.h"
 
 VarType *cfunc_type(Node *node) {
+    VarType *p = calloc(1, sizeof(VarType));
     // printfはlink.cのstdio.hを使う
-    if (strcmp("printf", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
+    if (strcmp("printf", node->func_name) == 0)
         p->ty= INT;
-        return p;
-    }
+    
 
     // argc, argv + 1つの変数でscanfを実行するとsegment fault
-    if (strcmp("scanf", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
+    else if (strcmp("scanf", node->func_name) == 0)
         p->ty = INT;
-        return p;
-    }
+        
     // callocはlink.cのstdlib.hを使う
-    if (strcmp("calloc", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= PTR;
+    else if (strcmp("calloc", node->func_name) == 0) {
+        p->ty = PTR;
         p->ptr_to = calloc(1, sizeof(VarType));
-        return p;
     }
+
     // strncmpはlink.cのstring.hを使う
-    if (strcmp("strncmp", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
-    // fopenはlink.cのstring.hを使う
-    if (strcmp("fopen", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= PTR;
+    else if (strcmp("strncmp", node->func_name) == 0)
+        p->ty = INT;
+    
+    else if (strcmp("strchr", node->func_name) == 0) {
+        p->ty = PTR;
         p->ptr_to = calloc(1, sizeof(VarType));
-        return p;
+        p->ptr_to->ty = CHAR;
     }
+
+    else if (strcmp("memcmp", node->func_name) == 0)
+        p->ty = INT;
+    
+    else if (strcmp("strlen", node->func_name) == 0)
+        p->ty = INT;
+    
+    else if (strcmp("isdigit", node->func_name) == 0)
+        p->ty = INT;
+    
+     else if (strcmp("strtol", node->func_name) == 0)
+        p->ty = INT;
+
+    // fopenはlink.cのstring.hを使う
+    else if (strcmp("fopen", node->func_name) == 0) {
+        p->ty = PTR;
+        p->ptr_to = calloc(1, sizeof(VarType));
+    }
+
     // fcloseはlink.cのstring.hを使う
-    if (strcmp("fclose", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
+    else if (strcmp("fclose", node->func_name) == 0)
+        p->ty = INT;
+        
     // fseekはlink.cのstring.hを使う
-    if (strcmp("fseek", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
+    else if (strcmp("fseek", node->func_name) == 0) 
+        p->ty = INT;
+        
     // ftellはlink.cのstring.hを使う
-    if (strcmp("ftell", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
-        return p;
-    }
+    else if (strcmp("ftell", node->func_name) == 0)
+        p->ty = INT;
+    
     // freadはlink.cのstring.hを使う
-    if (strcmp("fread", node->func_name) == 0) {
-        VarType *p = calloc(1, sizeof(VarType));
-        p->ty= INT;
+    else if (strcmp("fread", node->func_name) == 0)
+        p->ty = INT;
+        
+    else if (strcmp("isspace", node->func_name) == 0)
+        p->ty = INT;
+
+    if (p->ty) 
         return p;
-    }
-    return NULL;
+    else
+        return NULL;
 }

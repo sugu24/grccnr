@@ -1018,6 +1018,8 @@ Node *unary() {
 		return unary();
 	else if (consume("-"))
 		return new_binary(ND_SUB, new_num(0), unary());
+    else if (consume("!"))
+        return new_binary(ND_NOT, unary(), NULL);
     else if (consume("*"))
         return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&"))

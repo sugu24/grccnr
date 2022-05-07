@@ -1,10 +1,11 @@
 int main() {
   int *fp = fopen("testcase/temp.txt", "r");
-  if (fp == 0)
+  if (!fp)
     printf("ファイルがありません\n");
   
   if (fseek(fp, 0, 2) == -1)
     printf("だめ \n");
+  
   int size = ftell(fp);
   if (fseek(fp, 0, 0) == -1)
     printf("dame\n");
@@ -12,4 +13,5 @@ int main() {
   fread(buf, size, 1, fp);
   fclose(fp);
   printf("%s\n", buf);
+  
 }

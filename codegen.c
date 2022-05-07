@@ -276,6 +276,13 @@ void gen_stmt(Node *node) {
             printf("  push [rax]\n");
             printf("  sub [rax], QWORD PTR 1\n");
             return;
+        case ND_NOT:
+            gen_stmt(node->lhs);
+            printf("  cmp rax, 0\n");
+            printf("  sete al\n");
+            printf("  movzb rax, al\n");
+            printf("  push rax\n");
+            return;
         case ND_LVAR: // 変数
             if (node->lvar->glb_var) 
                 printf("  lea rax, .%s[rip]\n", node->lvar->name);
