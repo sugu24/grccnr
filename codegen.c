@@ -210,20 +210,22 @@ void gen_stmt(Node *node) {
         case ND_SWITCH:
             gen_stmt(node->lhs);
             printf("  pop rdi\n");
-            case_node = node->next_if_else;
-            while (case_node) {
-                if (case_node->kind == ND_CASE) {
-                    printf("  mov rax, %d\n", case_node->rhs->val);
-                    printf("  cmp rax, rdi\n");
-                    printf("  sete al\n");
-                    printf("  movzb rax, al\n");
-                    printf("  je .Lcase%d_%d\n", node->control, case_node->offset);
-                } 
-                else if (case_node->kind == ND_DEFAULT)
-                    printf("  jmp .Ldefault%d\n", node->control);
-                else 
-                    error("switch文でcase, default以外を検出しました");
-                case_node = case_node->next_if_else;
+            case_node = node;
+            while (case_node = case_node->next_if_else) {
+                switch (case_node->kind) {
+                    case ND_CASE:
+                        printf("  mov rax, %d\n", case_node->rhs->val);
+                        printf("  cmp rax, rdi\n");
+                        printf("  sete al\n");
+                        printf("  movzb rax, al\n");
+                        printf("  je .Lcase%d_%d\n", node->control, case_node->offset);
+                        break;
+                    case ND_DEFAULT:
+                        printf("  jmp .Ldefault%d\n", node->control);
+                        break;
+                    default:
+                        error("switch文でcase, default以外を検出しました");
+                }
             }
             printf("  jmp .Lend%d\n", node->control);
             gen_pop(node->stmt);
