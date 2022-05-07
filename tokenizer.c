@@ -140,7 +140,7 @@ Token *tokenize() {
 			continue;
 		}
 
-		if (strchr("+-*/%()<>;={}&,[].#", *p)) {
+		if (strchr("+-*/%()<>;={}&,[].#:", *p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
 		}
@@ -192,6 +192,8 @@ Token *tokenize() {
                 cur = new_token(TK_FOR, cur, p, len);
             else if (len == 3 && strncmp(p, "int", len) == 0)
                 cur = new_token(TK_INT, cur, p, len);
+            else if (len == 4 && strncmp(p, "long", len) == 0)
+                cur = new_token(TK_LONG, cur, p, len);
             else if (len == 4 && strncmp(p, "char", len) == 0)
                 cur = new_token(TK_CHAR, cur, p, len);
             else if (len == 6 && strncmp(p, "sizeof", len) == 0)
@@ -208,6 +210,12 @@ Token *tokenize() {
                 cur = new_token(TK_CONTINUE, cur, p, len);
             else if (len == 5 && strncmp(p, "break", len) == 0)
                 cur = new_token(TK_BREAK, cur, p, len);
+            else if (len == 6 && strncmp(p, "switch", len) == 0)
+                cur = new_token(TK_SWITCH, cur, p, len);
+            else if (len == 4 && strncmp(p, "case", len) == 0)
+                cur = new_token(TK_CASE, cur, p, len);
+            else if (len == 7 && strncmp(p, "default", len) == 0)
+                cur = new_token(TK_DEFAULT, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;

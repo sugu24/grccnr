@@ -92,6 +92,9 @@ int get_size(VarType *type) {
         case INT: 
             res = INT_SIZE;
             break;
+        case LONG_LONG_INT:
+            res = LONG_LONG_INT_SIZE;
+            break;
         case CHAR: 
             res = CHAR_SIZE;
             break;
@@ -308,6 +311,12 @@ VarType *AST_type(int ch, Node *node) {
             error_at(token->str, "continueは評価できません");
         case ND_BREAK:
             error_at(token->str, "breakは評価できません");
+        case ND_SWITCH:
+            error_at(token->str, "switchは評価できません");
+        case ND_CASE:
+            error_at(token->str, "caseは評価できません");
+        case ND_DEFAULT:
+            error_at(token->str, "defaultは評価できません");
         case ND_BLOCK:
             return AST_type(ch, node->next_stmt);
         case ND_CALL_FUNC:

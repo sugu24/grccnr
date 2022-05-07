@@ -7,6 +7,7 @@
 #include <errno.h>
 
 #define INT_SIZE 4
+#define LONG_LONG_INT_SIZE 8
 #define PTR_SIZE 8
 #define CHAR_SIZE 1
 
@@ -34,7 +35,6 @@ extern Typedef *typedefs;   // typedefの連結リスト
 extern Struct *structs;     // structの連結リスト
 extern Enum *enums;         // enumの連結リスト
 extern Prototype *prototype;// funcのプロトタイプ
-extern LVar *func_locals[1024]; // 関数内のローカル変数
 extern char *arg_register[6][4]; // 引数を記憶するレジスタ
 
 extern int control;
@@ -61,6 +61,10 @@ typedef enum {
     TK_ONE_CHAR, // 1文字
     TK_CONTINUE, // continue
     TK_BREAK,    // break
+    TK_LONG,     // long
+    TK_SWITCH,   // switch
+    TK_CASE,     // case
+    TK_DEFAULT,  // default
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -108,11 +112,14 @@ typedef enum {
     ND_LOGICAL_ADD, // 30 ||
     ND_LOGICAL_AND, // 31 &&
     ND_CONTINUE,    // 32 continue
-    ND_BREAK,       //  33 break
+    ND_BREAK,       // 33 break
+    ND_SWITCH,      // 34 switch
+    ND_CASE,        // 35 case
+    ND_DEFAULT,     // 36 default
 } NodeKind;
 
 // 変数の型
-typedef enum { INT = 1, CHAR, PTR, ARRAY, STRUCT, ENUM } Type;
+typedef enum { INT = 1, LONG_LONG_INT, CHAR, PTR, ARRAY, STRUCT, ENUM } Type;
 
 // 抽象構文木のノード型
 struct Node {
@@ -270,3 +277,6 @@ Node *initialize(int type, VarType *var_type, Node *lvar_node);
 
 // ---------- main ---------- //
 char *read_file(char *path);
+
+// ---------- cfunc ---------- //
+VarType *cfunc_type(Node *node);

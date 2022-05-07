@@ -13,4 +13,9 @@ int main() {
     printf("no\n");
   if (a = 3)
     printf("%d\n", a);
+
+  long long int d;
+  d = 100000 * 100000;
+  int e = 4;
+  printf("%d %lld %d\n", e, d, c);
 }

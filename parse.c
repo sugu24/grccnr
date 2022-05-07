@@ -1,5 +1,11 @@
 #include "grccnr.h"
 
+typedef struct Loop Loop;
+struct Loop {
+    Node *node;
+    Loop *bfr;
+};
+
 Func *code[1024];
 LVar *locals;
 LVar *global_var;
@@ -10,10 +16,10 @@ Struct *structs;
 Enum *enums;
 Prototype *prototype = NULL;
 
-int loop_control = 0;
-int if_control = 0;
-int looping = 0;
+int control = 0;
 int str_num = 0;
+Loop *Continue = NULL;
+Loop *Break = NULL;
 
 Node *new_node(NodeKind kind) {
 	Node *node = calloc(1, sizeof(Node));
@@ -222,7 +228,7 @@ Node *create_if_node(int con, int chain) {
         node->offset = chain;
     } else {
         node = new_node(ND_IF);
-        con = node->control = if_control++;
+        con = node->control = control++;
     }
 
     if (!consume("("))
@@ -252,27 +258,59 @@ Node *create_else_node(int con, int chain) {
     return node;
 }
 
+// Continueに追加
+void add_continue(Node *node) {
+    Loop *loop = calloc(1, sizeof(Loop));
+    loop->node = node;
+    loop->bfr = Continue;
+    Continue = loop;
+}
+
+// Breakに追加
+void add_break(Node *node) {
+    Loop *loop = calloc(1, sizeof(Loop));
+    loop->node = node;
+    loop->bfr = Break;
+    Break = loop;
+}
+
+// Continueから削除
+void remove_continue() {
+    Loop *loop = Continue;
+    Continue = Continue->bfr;
+    free(loop);
+}
+
+// Breakから削除
+void remove_break() {
+    Loop *loop = Break;
+    Break = Break->bfr;
+    free(loop);
+}
+
 // stmtがwhileの場合にBNFに沿ってNodeを生成して、Nodeを返す
 Node *create_while_node() {
     Node *node = new_node(ND_WHILE);
-    node->control = loop_control++;
+    node->control = control++;
     if (!consume("("))
         error_at(token->str, "'('でないトークンです");
     node->lhs = expr(); // 条件式
     if (!consume(")"))
         error_at(token->str, "')'でないトークンです");
     
-    looping += 1;
+    add_continue(node);
+    add_break(node);
     node->stmt = stmt();
-    looping -= 1;
-    
+    remove_continue();
+    remove_break();
+
     return node;
 }
 
 // stmtがforの場合にBNFに沿ってNodeを生成して、Nodeを返す
 Node *create_for_node() {
     Node *node = new_node(ND_FOR);
-    node->control = loop_control++;
+    node->control = control++;
     if (!consume("("))
         error_at(token->str, "'('でないトークンです");
         
@@ -294,10 +332,68 @@ Node *create_for_node() {
             error_at(token->str, "')'でないトークンです");
     }
     
-    looping += 1;
+    add_continue(node);
+    add_break(node);
     node->stmt = stmt();
-    looping -= 1;
+    remove_continue();
+    remove_break();
     
+    return node;
+}
+
+// stmtがswitchの場合にBNFにしたがってNodeを生成して、Nodeを返す
+Node *create_switch_node() {
+    Node *node = new_node(ND_SWITCH);
+    expect("(");
+    node->lhs = expr();
+    expect(")");
+    add_break(node);
+    node->control = control++;
+    expect("{");
+    node->stmt = create_block_node();
+    remove_break();
+    return node;
+}
+
+// caseのnodeを返す
+Node * create_case_node() {
+    if (!Break || Break->node->kind != ND_SWITCH)
+        error_at(token->str, "case が switch 文内に来ていません");
+    Node *node = new_node(ND_CASE);
+    Node *case_node = Break->node;
+    node->lhs = Break->node;
+    node->rhs = primary();
+    expect(":");
+
+    // switchのcaseのlastに入れる
+    int i;
+    for (i = 0; case_node->next_if_else; i++) case_node = case_node->next_if_else;
+    node->offset = i;
+
+    case_node->next_if_else = node;
+
+    if (node->rhs->kind != ND_NUM)
+        error_at(token->str, "caseで指定する値は定数である必要があります");
+
+    return node;
+}
+
+// defaultのnodeを返す
+Node *create_default_node() {
+    if (!Break || Break->node->kind != ND_SWITCH)
+        error_at(token->str, "default が switch 文内に来ていません");
+    Node *node = new_node(ND_DEFAULT);
+    node->lhs = Break->node;
+    Node *case_node = Break->node;
+    expect(":");
+
+    // switchのcaseのlastに入れる
+    int i;
+    for (i = 0; case_node->next_if_else; i++) case_node = case_node->next_if_else;
+    node->offset = i;
+
+    case_node->next_if_else = node;
+
     return node;
 }
 
@@ -309,16 +405,16 @@ Node *create_return_node() {
 }
 
 Node *create_continue_node() {
-    if (!looping) error_at(token->str, "繰り返し構文内のみで continue は使用可能です");
+    if (!Continue) error_at(token->str, "繰り返し構文内のみで continue は使用可能です");
     Node *node = new_node(ND_CONTINUE);
-    node->control = loop_control - 1;
+    node->control = Continue->node->control;
     return node;
 }
 
 Node *create_break_node() {
-    if (!looping) error_at(token->str, "繰り返し構文内のみで break は使用可能です");
+    if (!Break) error_at(token->str, "繰り返し構文内 または switch 文内のみで break は使用可能です");
     Node *node = new_node(ND_BREAK);
-    node->control = loop_control - 1;
+    node->control = Break->node->control;
     return node;
 }
 
@@ -474,7 +570,17 @@ Type get_var_type() {
         return INT;
     else if (consume_kind(TK_CHAR))
         return CHAR;
-    else 
+    else if (consume_kind(TK_LONG)) {
+        if (consume_kind(TK_INT))
+            return INT;
+        else if (consume_kind(TK_LONG))
+            if (consume_kind(TK_INT))
+                return LONG_LONG_INT;
+            else
+                error_at(token->str, "long long の次は int である必要があります");
+        else
+            error_at(token->str, "long の後は long か int である必要があります");
+    } else 
         return 0;
 }
 
@@ -739,6 +845,7 @@ stmt = expr ";"
 Node *stmt() {
     Node *node = NULL;
     LVar *lvar;
+
     // 変数宣言ならdeclare_varから返ってくる
     Typedef *typed = typedefs;
     if (lvar = declare_var(1)) {
@@ -749,17 +856,19 @@ Node *stmt() {
         return NULL;
 
     if (consume("{")) { // block文
-        node = create_block_node();
-        return node;
+        return create_block_node();
     } else if (consume_kind(TK_IF)) {
-        node = create_if_node(-1,0);
-        return node;
+        return create_if_node(-1,0);
     } else if (consume_kind(TK_WHILE)) {
-        node = create_while_node();
-        return node;
+        return create_while_node();
     } else if (consume_kind(TK_FOR)) { 
-        node = create_for_node();
-        return node;
+        return create_for_node();
+    } else if (consume_kind(TK_SWITCH)) {
+        return create_switch_node();
+    } else if (consume_kind(TK_CASE)) {
+        return create_case_node();
+    } else if (consume_kind(TK_DEFAULT)) {
+        return create_default_node();
     } else if (consume_kind(TK_RETURN)) {
         node = create_return_node();
     } else if (consume_kind(TK_CONTINUE)) {

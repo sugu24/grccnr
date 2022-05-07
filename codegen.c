@@ -49,6 +49,8 @@ int gen_arg_push(LVar *arg) {
         case INT:
             printf("  mov [rax], %s\n", arg_register[argc][1]);
             break;
+        case LONG_LONG_INT:
+            printf("  mov [rax], %s\n", arg_register[argc][0]);
         case STRUCT:
             error("関数の引数に構造体は未定義です");
         default:
@@ -103,6 +105,7 @@ void gen_addr(Node *node) {
 void gen_stmt(Node *node) {
     int i;
     int size;
+    Node *case_node;
     // printf("%d\n", node->kind);
 	switch (node->kind) {
         case ND_CALL_FUNC:
@@ -203,6 +206,37 @@ void gen_stmt(Node *node) {
             printf("  jmp .Lcmp%d\n", node->control);
             printf(".Lend%d:\n", node->control);
             printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
+            return;
+        case ND_SWITCH:
+            gen_stmt(node->lhs);
+            printf("  pop rdi\n");
+            case_node = node->next_if_else;
+            while (case_node) {
+                if (case_node->kind == ND_CASE) {
+                    printf("  mov rax, %d\n", case_node->rhs->val);
+                    printf("  cmp rax, rdi\n");
+                    printf("  sete al\n");
+                    printf("  movzb rax, al\n");
+                    printf("  je .Lcase%d_%d\n", node->control, case_node->offset);
+                } 
+                else if (case_node->kind == ND_DEFAULT)
+                    printf("  jmp .Ldefault%d\n", node->control);
+                else 
+                    error("switch文でcase, default以外を検出しました");
+                case_node = case_node->next_if_else;
+            }
+            printf("  jmp .Lend%d\n", node->control);
+            gen_pop(node->stmt);
+            printf(".Lend%d:\n", node->control);
+            printf("  push 0\n");
+            return;
+        case ND_CASE:
+            printf(".Lcase%d_%d:\n", node->lhs->control, node->offset);
+            printf("  push 0\n");
+            return;
+        case ND_DEFAULT:
+            printf(".Ldefault%d:\n", node->lhs->control);
+            printf("  push 0\n");
             return;
         case ND_CONTINUE:
             printf("  jmp .Lbegin%d\n", node->control);

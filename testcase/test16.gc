@@ -1,8 +1,10 @@
 int main(int argc, char **argv) {
-  int i;
-  int j;
-  for (i = 0; i < argc; i++) printf("%s\n", argv[i]);
-  printf("%d\n", i);
+  int i; 
   scanf("%d", &i);
-  printf("%d\n", i);
+  /*
+  int i;
+  for (i = 0; i < argc; i++) printf("%s\n", argv[i]);
+  scanf("%d", &i);
+  printf("%d\n",i);
+  */
 }
