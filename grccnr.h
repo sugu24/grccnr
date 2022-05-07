@@ -221,6 +221,7 @@ Token *consume_kind(TokenKind kind);
 void expect(char *op);
 int expect_number();
 bool at_eof();
+char to_ascii(char *c);
 
 int token_len(char *p); // トークンの長さを返す
 bool startswitch(char *p, char *q); // pとqが一致するか
@@ -231,7 +232,7 @@ Token *tokenize();
 Node *new_node(NodeKind kind);
 Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
 Node *new_num(int val);
-Node *new_char(char c);
+Node *new_char(char *c);
 LVar *find_lvar(int local, Token *tok);
 char *str_copy(Token *tok);
 LVar *declare_var(int type);

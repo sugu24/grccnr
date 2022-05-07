@@ -75,6 +75,25 @@ bool at_eof() {
 	return token->kind == TK_EOF;
 }
 
+// 文字列からasciiに
+char to_ascii(char *c) {
+    if (*c == '\\') {
+        switch (*(c+1)) {
+            case 'a': return '\a';
+            case 'n': return '\n';
+            case 't': return '\t';
+            case 'r': return '\r';
+            case 'f': return '\f';
+            case '\'': return '\'';
+            case '\"': return '\"';
+            case '0': return '\0';
+            case '\\': return '\\';
+            case '?': return '\?';
+            default: error_at(token->str, "%c%cが処理できません", *c, *(c+1));
+        }
+    } else return *c;
+}
+
 // 新しいトークンを生成してcurに繋げる
 Token *new_token(TokenKind kind, Token *cur, char *str, int len) {
 	Token *tok = calloc(1, sizeof(Token));
@@ -170,7 +189,11 @@ Token *tokenize() {
         // シングルクオートで記される文字
         if (strchr("\'", *p)) {
             p++;
-            cur = new_token(TK_ONE_CHAR, cur, p, 1);
+            if (strchr("\\", *p)) {
+                cur = new_token(TK_ONE_CHAR, cur, p, 2);
+                p++;
+            } else
+                cur = new_token(TK_ONE_CHAR, cur, p, 1);
             p++;
             if (!strchr("\'", *p))
                 error_at(p, "シングルクオートで囲む文字は1文字である必要があります");

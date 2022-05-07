@@ -40,9 +40,9 @@ Node *new_num(int val) {
 	return node;
 }
 
-Node *new_char(char c) {
+Node *new_char(char *c) {
     Node *node = new_node(ND_CHAR);
-    node->val = (int)c;
+    node->val = to_ascii(c);
     return node;
 }
 
@@ -1098,7 +1098,7 @@ Node *primary() {
     }
 
     if (tok = consume_kind(TK_ONE_CHAR))
-        return new_char(*(tok->str));
+        return new_char(tok->str);
     else if (tok = consume_kind(TK_NUM))
         return new_num(tok->val);
     

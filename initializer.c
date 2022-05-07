@@ -17,7 +17,7 @@ Node *init_local_string(Token *tok, VarType *var_type, Node *lvar_node) {
             new_binary(ND_INDEX, 
                 new_binary(ND_ADD, lvar_node, new_binary(ND_MUL, new_num(i), new_num(1))), 
                 NULL),
-            new_char(tok->str[i]));
+            new_char(&(tok->str[i])));
         
         next_node = calloc(1, sizeof(Node));
         next_node->stmt = next_cand_stmt;
