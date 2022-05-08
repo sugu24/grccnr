@@ -298,13 +298,17 @@ void gen_stmt(Node *node) {
 
             printf("  push rax\n");
             return;
+        case ND_NULL:
+            printf("  push 0\n");
+            return;
         case ND_ADDR:
             gen_addr(node->lhs);
             return;
         case ND_DEREF:
             gen_stmt(node->lhs);
             printf("  pop rax\n");
-            mov_rax_data(node);
+            if (node->access) printf("  mov rax, [rax]\n");
+            else mov_rax_data(node);
             printf("  push rax\n");
             return;
         case ND_INDEX:

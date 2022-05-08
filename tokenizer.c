@@ -177,6 +177,7 @@ Token *tokenize() {
             p++;
             char *q = p;
             while (!strchr("\"", *q)) {
+                if (strchr("\\", *q)) q++;
                 q++;
                 if (!*p) 
                     error("ダブルクオートで閉じられていません");
@@ -219,6 +220,8 @@ Token *tokenize() {
                 cur = new_token(TK_LONG, cur, p, len);
             else if (len == 4 && strncmp(p, "char", len) == 0)
                 cur = new_token(TK_CHAR, cur, p, len);
+            else if (len == 4 && strncmp(p, "void", len) == 0)
+                cur = new_token(TK_VOID, cur, p, len);
             else if (len == 6 && strncmp(p, "sizeof", len) == 0)
                 cur = new_token(TK_SIZEOF, cur, p, len);
             else if (len == 7 && strncmp(p, "typedef", len) == 0)
@@ -239,6 +242,8 @@ Token *tokenize() {
                 cur = new_token(TK_CASE, cur, p, len);
             else if (len == 7 && strncmp(p, "default", len) == 0)
                 cur = new_token(TK_DEFAULT, cur, p, len);
+            else if (len == 4 && strncmp(p, "NULL", len) == 0)
+                cur = new_token(TK_NULL, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;

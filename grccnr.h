@@ -10,6 +10,7 @@
 #define LONG_LONG_INT_SIZE 8
 #define PTR_SIZE 8
 #define CHAR_SIZE 1
+#define VOID_SIZE 1
 
 typedef struct Token Token;
 typedef struct Node Node;
@@ -65,6 +66,8 @@ typedef enum {
     TK_SWITCH,   // switch
     TK_CASE,     // case
     TK_DEFAULT,  // default
+    TK_VOID,     // void
+    TK_NULL,     // NULL
 	TK_EOF,      // 入力の終わりを表すトークン
 } TokenKind;
 
@@ -117,10 +120,11 @@ typedef enum {
     ND_CASE,        // 35 case
     ND_DEFAULT,     // 36 default
     ND_NOT,         // 37 not
+    ND_NULL,        // 38 NULL
 } NodeKind;
 
 // 変数の型
-typedef enum { INT = 1, LONG_LONG_INT, CHAR, PTR, ARRAY, STRUCT, ENUM } Type;
+typedef enum { VOID = 1, INT, LONG_LONG_INT, CHAR, PTR, ARRAY, STRUCT, ENUM } Type;
 
 // 抽象構文木のノード型
 struct Node {

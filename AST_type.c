@@ -74,6 +74,8 @@ VarType *func_type(Node *node) {
 // 戻り値が関数の戻り値と一致しているか
 int returnable(VarType *func_type, VarType *return_type) {
     while (func_type->ty == return_type->ty) {
+        if (func_type->ty == VOID)
+            error_at(token->str, "関数の型が void であるが戻り値が指定されています");
         if (!func_type->ptr_to && !return_type->ptr_to)
             return 1;
         else if (!func_type->ptr_to || !return_type->ptr_to)
@@ -97,6 +99,9 @@ int get_size(VarType *type) {
             break;
         case CHAR: 
             res = CHAR_SIZE;
+            break;
+        case VOID:
+            res = VOID_SIZE;
             break;
         case PTR:
             res = PTR_SIZE;
@@ -228,6 +233,12 @@ VarType *AST_type(int ch, Node *node) {
             var_type->ptr_to = calloc(1, sizeof(VarType));
             var_type->ptr_to->ty = CHAR;
             return var_type;
+        case ND_NULL:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = PTR;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = VOID;
+            return var_type;
         case ND_ADDR:
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = PTR;
@@ -282,6 +293,8 @@ VarType *AST_type(int ch, Node *node) {
         case ND_ASSIGN:
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);
+            if (rhs_var_type->ty == VOID)
+                error_at(token->str, "void 値を無視されていません");
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
             lsize = get_size(lhs_var_type);
             rsize = get_size(get_type(rhs_var_type));

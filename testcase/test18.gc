@@ -1,7 +1,26 @@
+typedef struct strct {
+	int a;
+} strct;
+
+strct *new_strct(int a) {
+	if (a >= 5) return NULL;
+	strct *s;
+	s = calloc(1, sizeof(strct));
+	s->a = a;
+	return s;
+} 
+
+void f(char a) {
+	printf("a%ca\n", a);
+}
+
 int main() {
-	int a = 3;
-	if (!a)
-		printf("a is zero\n");
-	else
-		printf("a is not zero\n");
+	char a = '\n';
+	strct *strct1;
+	strct *strct2;
+	f(a);
+	strct1 = new_strct(3);
+	printf("%p\n", strct1);
+	strct2 = new_strct(5);
+	printf("%p\n", strct2);
 }

@@ -11,9 +11,9 @@ LVar *locals;
 LVar *global_var;
 LVar *strs;
 Func *now_func;
-Typedef *typedefs;
-Struct *structs;
-Enum *enums;
+Typedef *typedefs = NULL;
+Struct *structs = NULL;
+Enum *enums = NULL;
 Prototype *prototype = NULL;
 
 int control = 0;
@@ -43,6 +43,11 @@ Node *new_num(int val) {
 Node *new_char(char *c) {
     Node *node = new_node(ND_CHAR);
     node->val = to_ascii(c);
+    return node;
+}
+
+Node *new_null() {
+    Node *node = new_node(ND_NULL);
     return node;
 }
 
@@ -106,7 +111,7 @@ VarType *get_typedefed_type() {
 
 // タグ名が定義されたstructならばStructを返す
 Struct *get_struct(Token *tok) {
-    for (Struct *struct_p = structs; structs; struct_p = struct_p->next) {
+    for (Struct *struct_p = structs; struct_p; struct_p = struct_p->next) {
         if (tok->len == struct_p->len &&
             !memcmp(tok->str, struct_p->name, tok->len)) {
             return struct_p;
@@ -431,7 +436,7 @@ Struct *new_struct() {
     if (tok && (struct_p = get_struct(tok)))
         // 既に定義されたタグ名ならそれを返す
         return struct_p;
-    
+
     // 新しいstructの生成
     struct_p = calloc(1, sizeof(Struct));
     if (tok) {
@@ -566,7 +571,9 @@ void include() {
 
 // 原始的な型かどうか
 Type get_var_type() {
-    if (consume_kind(TK_INT))
+    if (consume_kind(TK_VOID))
+        return VOID;
+    else if (consume_kind(TK_INT))
         return INT;
     else if (consume_kind(TK_CHAR))
         return CHAR;
@@ -591,13 +598,15 @@ VarType *new_var_type(int type) {
     int typedef_type = 0;
     top_var_type = var_type = calloc(1, sizeof(VarType));
     
-    // 型取得
+    // 型取得    
     while (true) {
         if (consume_kind(TK_TYPEDEF)) {
             typedef_type = 1;
         } else if (ty = get_var_type()) {
             if (var_type->ty)
                 error_at(token->str, "型は一意に定めなければいけません");
+            if (type != 2 && ty == VOID)
+                error_at(token->str, "void型は変数の型として指定できません");
             var_type->ty = ty;
         } else if (temp_type = get_typedefed_type()) {
             if (var_type->ty)
@@ -731,7 +740,7 @@ LVar *declare_var(int type) {
 
     lvar_node->lvar = lvar;
     lvar_node->offset = lvar->offset;
-
+    
     // 変数宣言終了
     if (type == 0 || consume(";"))
         return lvar;
@@ -828,6 +837,14 @@ Func *glbstmt() {
     }
     // グローバル変数
     else {
+        // voidかたはNG
+        VarType *temp = var_or_func->type;
+        while (temp) {
+            if (temp->ty == VOID) 
+                error_at(token->str, "void型は変数の型として指定できません");
+            temp = temp->ptr_to;
+        }
+
         // 連結リスト構築
         var_or_func->next = global_var;
         global_var = var_or_func;
@@ -1042,6 +1059,7 @@ Node *primary() {
         return attach(node);
     }
     
+    // 変数か関数
     if (tok = consume_kind(TK_IDENT)) {
         // 変数か関数
         if (consume("(")) { // 関数の場合
@@ -1083,8 +1101,7 @@ Node *primary() {
     }
     
     // 文字リテラル
-    tok = consume_kind(TK_STR);
-    if (tok) {
+    else if (tok = consume_kind(TK_STR)) {
         // strsに追加してND_STRに設定
         LVar *str = calloc(1, sizeof(LVar));
         Node *node = new_node(ND_STR_PTR);
@@ -1097,8 +1114,11 @@ Node *primary() {
         return node;
     }
 
-    if (tok = consume_kind(TK_ONE_CHAR))
+    // ''で囲まれたascii
+    else if (tok = consume_kind(TK_ONE_CHAR))
         return new_char(tok->str);
+    else if (tok = consume_kind(TK_NULL))
+        return new_null();
     else if (tok = consume_kind(TK_NUM))
         return new_num(tok->val);
     
@@ -1158,6 +1178,7 @@ Node *attach(Node *node) {
             mem_node = new_node(ND_MEMBAR);
             mem_node->lvar = lvar;
             node = new_binary(ND_DEREF, node, NULL);
+            node->access = 1;
             node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
             type = lvar->type;
         }
