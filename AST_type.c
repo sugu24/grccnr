@@ -13,7 +13,7 @@ int arg_check(Func *func, Node *node) {
         else if (!(node->arg[argc-1] && arg)) return 0;
 
         // same_type(AST_type(呼び出し元, 関数引数定義))
-        if (!same_type(AST_type(0, node->arg[argc-1]), arg->type)) return 0;
+        if (!same_type(AST_type(0, node->arg[argc-1]), arg->type) && node->arg[argc-1]->kind != ND_SUB) return 0;
         
         argc--;
         while (arg->next && arg->offset == arg->next->offset) arg = arg->next;
@@ -294,11 +294,11 @@ VarType *AST_type(int ch, Node *node) {
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);
             if (rhs_var_type->ty == VOID)
-                error_at(token->str, "void 値を無視されていません");
+                error_at(token->str, "void 値が無視されていません");
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
             lsize = get_size(lhs_var_type);
             rsize = get_size(get_type(rhs_var_type));
-            if (rsize >= 8 && lsize < rsize)
+            if (rsize > 8 && lsize < rsize)
                 error_at(token->str, "右辺より左辺の方がサイズが小さいです");
             return lhs_var_type;
         case ND_LVAR_ADD:

@@ -63,6 +63,9 @@ VarType *cfunc_type(Node *node) {
         
     else if (strcmp("isspace", node->func_name) == 0)
         p->ty = INT;
+    
+    else if (strcmp("exit", node->func_name) == 0)
+        p->ty = VOID;
 
     if (p->ty) 
         return p;

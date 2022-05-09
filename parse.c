@@ -69,7 +69,7 @@ LVar *find_lvar(int local, Token *tok) {
     }
 
     // グローバル変数
-    for (LVar *var = global_var; var; var = var->next) {
+    for (LVar *var = global_var; var && local > 1; var = var->next) {
         if (tok->len == var->len && 
             !memcmp(tok->str, var->name, var->len)) {
             return var;
@@ -686,7 +686,7 @@ LVar *declare_var(int type) {
         }
         error_at(token->str, "宣言する変数名がありません");
     }
-    if (find_lvar(0, tok_var_name)) 
+    if (find_lvar(type, tok_var_name)) 
         error_at(tok_var_name->str, "既に宣言された変数名です");
     
     lvar->name = str_copy(tok_var_name);
@@ -1082,7 +1082,7 @@ Node *primary() {
             node = new_node(ND_LVAR);
             
             // 変数,enumの順番で変数確認
-            if (node->lvar = find_lvar(1, tok)) {}            
+            if (node->lvar = find_lvar(2, tok)) {}            
             else if (enum_mem_node = find_enum_membar(tok))
                 return enum_mem_node;
             else 
