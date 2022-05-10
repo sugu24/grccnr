@@ -69,11 +69,17 @@ LVar *find_lvar(int local, Token *tok) {
     }
 
     // グローバル変数
+    LVar *bfr;
     for (LVar *var = global_var; var && local > 1; var = var->next) {
         if (tok->len == var->len && 
             !memcmp(tok->str, var->name, var->len)) {
+            if (local == 2 && var->type->extern_) {
+                if (var->next) bfr->next = var->next;
+                continue;
+            }
             return var;
         }
+        bfr = var;
     }
 
     return NULL;
@@ -110,10 +116,9 @@ VarType *get_typedefed_type() {
 }
 
 // タグ名が定義されたstructならばStructを返す
-Struct *get_struct(Token *tok) {
+Struct *get_struct(char *str, int len) {
     for (Struct *struct_p = structs; struct_p; struct_p = struct_p->next) {
-        if (tok->len == struct_p->len &&
-            !memcmp(tok->str, struct_p->name, tok->len)) {
+        if (len == struct_p->len && !memcmp(str, struct_p->name, len)) {
             return struct_p;
         }
     }
@@ -377,7 +382,7 @@ Node * create_case_node() {
 
     case_node->next_if_else = node;
 
-    if (node->rhs->kind != ND_NUM)
+    if (node->rhs->kind != ND_NUM && node->rhs->kind != ND_CHAR) 
         error_at(token->str, "caseで指定する値は定数である必要があります");
 
     return node;
@@ -433,7 +438,7 @@ Struct *new_struct() {
 
     // タグ名があるか
     tok = consume_kind(TK_IDENT);
-    if (tok && (struct_p = get_struct(tok)))
+    if (tok && (struct_p = get_struct(tok->str, tok->len)))
         // 既に定義されたタグ名ならそれを返す
         return struct_p;
 
@@ -602,6 +607,12 @@ VarType *new_var_type(int type) {
     while (true) {
         if (consume_kind(TK_TYPEDEF)) {
             typedef_type = 1;
+        } else if (consume_kind(TK_EXTERN)) {
+            if (var_type->extern_)
+                error_at(token->str, "externを重複して宣言しています");
+            if (type < 2)
+                error_at(token->str, "まだグローバル領域のみextern宣言の処理が出来ません");
+            var_type->extern_ = 1;
         } else if (ty = get_var_type()) {
             if (var_type->ty)
                 error_at(token->str, "型は一意に定めなければいけません");
@@ -643,6 +654,7 @@ VarType *new_var_type(int type) {
         top_var_type = calloc(1, sizeof(VarType));
         top_var_type->ty = PTR;
         top_var_type->ptr_to = var_type;
+        top_var_type->extern_ = var_type->extern_;
         var_type = top_var_type;
     }
     
@@ -686,7 +698,7 @@ LVar *declare_var(int type) {
         }
         error_at(token->str, "宣言する変数名がありません");
     }
-    if (find_lvar(type, tok_var_name)) 
+    if (find_lvar(type, tok_var_name))
         error_at(tok_var_name->str, "既に宣言された変数名です");
     
     lvar->name = str_copy(tok_var_name);
@@ -1082,7 +1094,7 @@ Node *primary() {
             node = new_node(ND_LVAR);
             
             // 変数,enumの順番で変数確認
-            if (node->lvar = find_lvar(2, tok)) {}            
+            if (node->lvar = find_lvar(3, tok)) {}            
             else if (enum_mem_node = find_enum_membar(tok))
                 return enum_mem_node;
             else 
@@ -1181,6 +1193,8 @@ Node *attach(Node *node) {
             node->access = 1;
             node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
             type = lvar->type;
+            if (type->ty == PTR && type->ptr_to->ty == STRUCT)
+                type->ptr_to->struct_p = get_struct(type->ptr_to->struct_p->name, type->ptr_to->struct_p->len);
         }
         else
             break;

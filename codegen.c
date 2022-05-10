@@ -51,6 +51,7 @@ int gen_arg_push(LVar *arg) {
             break;
         case LONG_LONG_INT:
             printf("  mov [rax], %s\n", arg_register[argc][0]);
+            break;
         case STRUCT:
             error("関数の引数に構造体は未定義です");
         default:
@@ -194,15 +195,15 @@ void gen_stmt(Node *node) {
             printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
             return;
         case ND_FOR:
-            gen_pop(node->lhs);
+            if (node->lhs) gen_pop(node->lhs);
             printf(".Lcmp%d:\n", node->control);
-            gen_stmt(node->mhs);
+            if (node->mhs) gen_stmt(node->mhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  je  .Lend%d\n", node->control);
             gen_pop(node->stmt);
             printf(".Lbegin%d:\n", node->control);
-            gen_pop(node->rhs);
+            if (node->rhs) gen_pop(node->rhs);
             printf("  jmp .Lcmp%d\n", node->control);
             printf(".Lend%d:\n", node->control);
             printf("  push 0\n"); // mainに戻るとpopされるから適当にpushしておく
@@ -541,7 +542,12 @@ void gen_global_var() {
     printf("\n.data\n");
 
     for (glb_var = global_var; glb_var; glb_var = glb_var->next) {
-        printf(".%s:\n", glb_var->name);
+        if (glb_var->type->extern_) 
+            printf(".extern .%s:\n", glb_var->name);
+        else {
+            printf(".globl .%s\n", glb_var->name);
+            printf(".%s:\n", glb_var->name);
+        }
         gen_initialize_data(glb_var);
     }
 

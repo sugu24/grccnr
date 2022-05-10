@@ -70,7 +70,7 @@ char *read_file(char *path) {
     // ファイルが必ず \n\0 で終わるようにする
     if (size == 0 || buf[size - 1] != '\n')
         buf[size++] = '\n';
-    buf[size] = '\n';
+    buf[size] = '\0';
     fclose(fp);
     return buf;
 }

@@ -244,6 +244,8 @@ Token *tokenize() {
                 cur = new_token(TK_DEFAULT, cur, p, len);
             else if (len == 4 && strncmp(p, "NULL", len) == 0)
                 cur = new_token(TK_NULL, cur, p, len);
+            else if (len == 6 && strncmp(p, "extern", len) == 0)
+                cur = new_token(TK_EXTERN, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;

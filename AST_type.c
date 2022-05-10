@@ -13,6 +13,7 @@ int arg_check(Func *func, Node *node) {
         else if (!(node->arg[argc-1] && arg)) return 0;
 
         // same_type(AST_type(呼び出し元, 関数引数定義))
+        //printf(" --- %d\n",node->arg[argc-1]->kind);
         if (!same_type(AST_type(0, node->arg[argc-1]), arg->type) && node->arg[argc-1]->kind != ND_SUB) return 0;
         
         argc--;
@@ -25,6 +26,10 @@ int same_type(VarType *v1, VarType *v2) {
     while (1) {
         //printf("v1 %d v2 %d\n", v1->ty, v2->ty);
         if ((v1->ty == ARRAY && v2->ty == PTR) || (v1->ty == PTR && v2->ty == ARRAY)) {}
+        else if ((v1->ty == CHAR && v2->ty == INT) ||
+                 (v1->ty == CHAR && v2->ty == LONG_LONG_INT) ||
+                 (v1->ty == INT && v2->ty == LONG_LONG_INT)) {}
+        else if (v1->ty == VOID) {}
         else if (v1->ty != v2->ty) return 0;
         else if (v1->ty == STRUCT && get_size(v1) != get_size(v2)) return 0;
 
@@ -259,7 +264,9 @@ VarType *AST_type(int ch, Node *node) {
                 error_at(token->str, "式内のポインタの型が一致しません");
             return var_type;
         case ND_MEMBAR_ACCESS:
+            //printf("%d %d\n", node->lhs->kind, node->lhs->lhs->kind);
             var_type = AST_type(ch, node->lhs);
+            //printf("%d\n", var_type->ty);
             return var_type;
         case ND_EQ:
             AST_type(ch, node->lhs);
@@ -348,10 +355,14 @@ VarType *AST_type(int ch, Node *node) {
     // 演算の場合
     // それぞれ指している値の意味が異なる場合
     // ptrs--してからsizeを取得 例) int*なら+4
-    
-    if (!ch) return lhs_var_type;
 
     Type lt = lhs_var_type->ty, rt = rhs_var_type->ty;
+    
+    if (lt == STRUCT || (lt == PTR && lhs_var_type->ptr_to->ty == STRUCT)) {
+        if (ch) node->rhs->offset = get_membar_offset(node->rhs->lvar);
+        return rhs_var_type;
+    }
+
     if (lt == rt) {
         return lhs_var_type;
     } 
@@ -360,17 +371,12 @@ VarType *AST_type(int ch, Node *node) {
         return lhs_var_type;
     
     if ((lt == PTR || lt == ARRAY) && (rt == CHAR || rt == INT))  {
-        node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
+        if (ch) node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
         return lhs_var_type;
     }
     
     if ((lt == CHAR || lt == INT) && (rt == PTR && rt == ARRAY)) {
-        node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
-        return rhs_var_type;
-    }
-    
-    if (lt == STRUCT) {
-        node->rhs->offset = get_membar_offset(node->rhs->lvar);
+        if (ch) node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         return rhs_var_type;
     }
 
