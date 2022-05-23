@@ -1,0 +1,6 @@
+int main() { 
+	asm("mov rax, 10");
+	asm("mov rsp, rbp");
+	asm("pop rbp");
+	asm("ret");
+}

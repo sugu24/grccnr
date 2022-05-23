@@ -1,0 +1,39 @@
+int H;
+int W;
+
+// マスを全てprintする
+int printMass(char *mass) {
+	int i;
+	int j;
+	printf("print start\n");
+	for (i = 0; i < H; i++) {
+		for (j = 0; j < W; j++) {
+      			printf("%c", *(mass+i*H+j));
+    		}
+    		printf("\n");
+  	}
+  	printf("print end\n");
+}
+
+//  H*Wの1次元配列に
+//  index % 2 == 0 -> a
+//  index % 2 == 1 -> d
+//  を代入してprintする
+int main() {
+  	char mass[100];
+	int i;
+  	int j;
+  	H = 5;
+  	W = 5;
+  
+  	for (i = 0; i < H; i++) {
+    		for (j = 0; j < W; j++) {
+      			if ((i + j) % 2 == 0) mass[i*H+j] = 97;
+                        else mass[i*H+j] = 100;
+    		}
+  	}
+
+ 	printMass(mass);
+  
+}
+

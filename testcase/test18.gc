@@ -1,0 +1,31 @@
+typedef struct strct {
+	int a;
+	int b;
+	int c;
+} strct;
+
+void new_strct(strct **stc, int a) {
+	if (a >= 5) { *stc = NULL; }
+	else { 
+        	*stc = calloc(1, sizeof(strct));
+		(*stc)->a = a;
+	}
+} 
+
+void f(char a) {
+	printf("a%ca\n", a);
+}
+
+int main() {
+	char a = '\n';
+	strct *strct1;
+	strct **strct2;
+	f(a);
+	strct2 = &strct1;
+	strct ***strct3 = &strct2;
+	new_strct(&strct1, 3);
+	printf("%p\n", strct1);
+	printf("%p\n", strct2);
+	printf("%d\n", (**strct3)->a);
+}
+

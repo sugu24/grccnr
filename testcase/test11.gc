@@ -1,0 +1,21 @@
+
+typedef enum number {
+	A,
+	B,
+	C = 10,
+	D,
+} numb;
+
+numb res_num() {
+	return D;
+}
+
+int main() {
+	numb num;
+	int A = 100;
+	int a;
+	num = A + B + C + D;
+	a = A + B + C + res_num();
+	printf("num=122->%d, a=122->%d\n", num, a);
+	return num;
+}

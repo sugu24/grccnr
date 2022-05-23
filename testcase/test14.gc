@@ -1,0 +1,34 @@
+typedef struct token token;
+struct token {
+	token *next;
+	int b;
+};
+
+token *tok;
+
+int main() {
+  tok = calloc(1, sizeof(token));
+  tok->next = calloc(1, sizeof(token));
+  for (; tok; tok = tok->next) printf("a\n");
+  /*
+  int a = 'a';
+  int b = 2; 
+  int c = 3;
+  printf("a=97->%d\n", a);
+  if ((a == 97 || b == 3) && c == 1)
+    printf("yes\n");
+  else
+    printf("no\n");
+  if (a == 97 || b == 3 && c == 1)
+    printf("yes\n");
+  else
+    printf("no\n");
+  if (a = 3)
+    printf("%d\n", a);
+
+  long long int d;
+  d = 100000 * 100000;
+  int e = 4;
+  printf("%d %lld %d\n", e, d, c);
+  */
+}

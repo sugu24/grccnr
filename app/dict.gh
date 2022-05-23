@@ -1,0 +1,20 @@
+typedef struct DictItem DictItem;
+
+struct DictItem {
+    DictItem *next;
+    int ty;
+    char *key;
+    int len;
+    char *val_str;
+    int val_num;
+    long long int ptr;
+};
+
+int hash_number(char *key, int table_len);
+int key_len(char *key);
+
+int create_dict(DictItem **dict, int table_len);
+int set_val_num(DictItem **dict, int table_len, char *key_s, int val);
+int is_item(DictItem **dict, int table_len, char *key_s);
+int get_val_num(DictItem **dict, int table_len, char *key_s);
+int add_item(DictItem **dict, int table_len, char *key_s);

@@ -1,0 +1,15 @@
+int main() {
+  char *s = "abc";
+  int a = 4;
+  a = a++ + a++; // 9
+  a *= a + 1;    // 90
+  a %= 40;       // 10
+  a += a-- + a;  // 29
+  while (*s) {
+    a += *s % 10; // 36,44,53
+    s++;
+    if (*s) continue;
+    else break;
+  }
+  return a;
+}
