@@ -1,5 +1,7 @@
 *~
+*.s
 *.o
 temp*
 a.aut
 grccnr
+cinter

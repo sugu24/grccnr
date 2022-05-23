@@ -1,3 +1,0 @@
-int main() { 
-	printf("\n\n\nerror is comming.\ntest end.\n\n\n"); 
-}
