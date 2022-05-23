@@ -1,0 +1,153 @@
+#include "cinter.gh"
+
+// 変数のサイズを返す
+// get_size呼ぶときは*を処理した後
+// interpreterなのでlong long intのみでlong long int は1
+int get_size(VarType *type) {
+    int res = 0;
+    Var *var;
+    switch (type->ty) {
+        case INT: 
+            res = 1;
+            break;
+        case LONG_LONG_INT:
+            res = 1;
+            break;
+        case CHAR: 
+            res = 1;
+            break;
+        case VOID:
+            res = 1;
+            break;
+        case PTR:
+            res = 1;
+            break;
+        case ARRAY:
+            res = type->array_size * get_size(type->ptr_to);
+            break;
+        case STRUCT:
+            //for (var = type->struct_p->membar; var; var = var->next)
+            //    res += get_size(var->type);
+            break;
+        default:
+            printf("型が処理できません\n");
+            exit(1);
+    }
+    return res;
+}
+
+int calcuratable(VarType *lhs, VarType *rhs) {
+    if (lhs->ty == ARRAY || lhs->ty == PTR || lhs->ty == STRUCT)
+        return 0;
+    if (rhs->ty == ARRAY || rhs->ty == PTR || rhs->ty == STRUCT)
+        return 0;
+    return 1;
+}
+
+VarType *AST_type(Node *node) {
+    VarType *lhs_var_type;
+    VarType *rhs_var_type;
+    VarType *var_type;
+    int lsize;
+    int rsize;
+
+    switch (node->kind) {
+        case ND_ADD:
+            lhs_var_type = AST_type(node->lhs);
+            rhs_var_type = AST_type(node->rhs);
+            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+                var_type = lhs_var_type;
+            else
+                var_type = rhs_var_type;
+            break;
+        case ND_SUB:
+            lhs_var_type = AST_type(node->lhs);
+            rhs_var_type = AST_type(node->rhs);
+            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+                var_type = lhs_var_type;
+            else
+                var_type = rhs_var_type;
+            break;
+        case ND_MUL:
+            lhs_var_type = AST_type(node->lhs);
+            rhs_var_type = AST_type(node->rhs);
+            if (!calcuratable(lhs_var_type, rhs_var_type)) {
+                printf("is not calcuratable\n");
+                exit(1);
+            }
+            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+                var_type = lhs_var_type;
+            else
+                var_type = rhs_var_type;
+            break;
+        case ND_DIV:
+            lhs_var_type = AST_type(node->lhs);
+            rhs_var_type = AST_type(node->rhs);
+            if (!calcuratable(lhs_var_type, rhs_var_type)) {
+                printf("is not calcuratable\n");
+                exit(1);
+            }
+            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+                var_type = lhs_var_type;
+            else
+                var_type = rhs_var_type;
+            break;
+        case ND_MOD:
+            lhs_var_type = AST_type(node->lhs);
+            rhs_var_type = AST_type(node->rhs);
+            if (!calcuratable(lhs_var_type, rhs_var_type)) {
+                printf("is not calcuratable\n");
+                exit(1);
+            }
+            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+                var_type = lhs_var_type;
+            else
+                var_type = rhs_var_type;
+            break;
+        case ND_LOGICAL_ADD:
+        case ND_LOGICAL_AND:
+            AST_type(node->lhs);
+            AST_type(node->rhs);
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = INT;
+            break;
+        case ND_NUM:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = INT;
+            break;
+        case ND_CHAR:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = CHAR;
+            break;
+        case ND_STR:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = ARRAY;
+            var_type->array_ize = node->var->len;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to-ty = CHAR;
+            break;
+        case ND_STR_PTR:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = PTR;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = CHAR;
+            break;
+        case ND_NULL:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = PTR;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = VOID;
+            break;
+        case ND_DEREF:
+            var_type = AST_type(node->lhs);
+            if (var_type->ty == ARRAY || var_type->ty == PTR)
+                var_type = var_type->ptr_to;
+            else {
+                printf("var is not pointer\n");
+                exit(1);
+            }
+            break;
+        case ND_INDEX:
+            
+    }
+}

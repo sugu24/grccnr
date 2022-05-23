@@ -1,0 +1,230 @@
+
+typedef struct Token Token;
+typedef struct Node Node;
+typedef struct VarType VarType;
+typedef struct Var Var;
+typedef struct Func Func;
+typedef struct VarVal VarVal;
+
+typedef enum TokenKind TokenKind;
+typedef enum NodeKind NodeKind;
+typedef enum TypeSize TypeSize;
+
+enum TypeSize {
+    INT_SIZE = 4,
+    LONG_LONG_INT_SIZE = 8,
+    PTR_SIZE = 8,
+    CHAR_SIZE = 1,
+    VOID_SIZE = 1,
+};
+
+enum TokenKind {
+    TK_RESERVED, // 0 記号
+    TK_IDENT,    // 1 識別子
+	TK_NUM,      // 2 整数トークン
+    TK_RETURN,   // 3 return
+    TK_IF,       // 4 if
+    TK_ELSE,     // 5 else
+    TK_WHILE,    // 6 while
+    TK_FOR,      // 7 for
+    TK_INT,      // 8 int
+    TK_CHAR,     // 9 char
+    TK_SIZEOF,   // 10 sizeof
+    TK_STR,      // 11 文字列
+    TK_TYPEDEF,  // 12 typedef
+    TK_STRUCT,   // 13 struct
+    TK_ENUM,     // 14 enum
+    TK_INCLUDE,  // 15 include
+    TK_ONE_CHAR, // 16 1文字
+    TK_CONTINUE, // 17 continue
+    TK_BREAK,    // 18 break
+    TK_LONG,     // 19 long
+    TK_SWITCH,   // 20 switch
+    TK_CASE,     // 21 case
+    TK_DEFAULT,  // 22 default
+    TK_VOID,     // 23 void
+    TK_NULL,     // 24 NULL
+	TK_EOF,      // 25 入力の終わりを表すトークン
+};
+
+struct Token {
+    TokenKind kind;
+    Token *next;
+    char *str;
+    int len;
+    int val;
+};
+
+enum NodeKind {
+    ND_ADD,    // 0 +
+	ND_SUB,    // 1 -
+	ND_MUL,    // 2 *
+	ND_DIV,    // 3 /
+    ND_MOD,    // 4 %
+	ND_NUM,    // 5 整数
+    ND_ADDR,   // 6 &var
+    ND_DEREF,  // 7 *var
+	ND_EQ,     // 8 ==
+	ND_NE,     // 9 !=
+	ND_LT,     // 10 <
+	ND_LE,     // 11 <=
+    ND_ASSIGN, // 12= 
+    ND_LVAR,   // 13 ローカル変数
+    ND_RETURN, // 14 return
+    ND_IF,     // 15 if
+    ND_ELSE_IF,// 16 else if
+    ND_ELSE,   // 17 else
+    ND_WHILE,  // 18 while
+    ND_FOR,    // 19 for
+    ND_BLOCK,  // 20 block文
+    ND_CALL_FUNC, // 21 関数呼び出し
+    ND_STR_PTR, // 22 文字列のポインタ
+    ND_STR,     // 23 文字リテラル
+    ND_CHAR,    // 24 1文字
+    ND_INDEX,   // 25 []
+    ND_MEMBAR,  // 26 メンバ変数
+    ND_MEMBAR_ACCESS, // 27 struct.membar
+    ND_VAR_ADD, // 28 ++
+    ND_VAR_SUB, // 29 --
+    ND_LOGICAL_ADD, // 30 ||
+    ND_LOGICAL_AND, // 31 &&
+    ND_CONTINUE,    // 32 continue
+    ND_BREAK,       // 33 break
+    ND_SWITCH,      // 34 switch
+    ND_CASE,        // 35 case
+    ND_DEFAULT,     // 36 default
+    ND_NOT,         // 37 not
+    ND_NULL,        // 38 NULL
+    ND_BLOCK_END,   // 39 }
+    ND_CONTROL_END, // 40
+    ND_FOR_START,   // 41
+    ND_PRINTF,      // 42
+    ND_SCANF,       // 43
+};
+
+struct Node {
+    NodeKind kind; // ノードの型
+	Node *lhs;     // 左辺
+    Node *mhs;
+	Node *rhs;     // 右辺
+    Node *stmt;    // if,for,whileのstmt
+    Node *next_if_else; // else if or elseのノード
+    Node *next_stmt;  // block内のstmtを表す
+    int val;       // kindがND_NUMの場合のみ使う
+    int offset;    // kindがND_LVAR, ND_ELSE_IF,ND_DEREFの場合に使う
+    int control;   // kindが制御構文の場合のみ使う(ラベル番号)
+    Node *args;     // kindがND_CALL_FUNCの場合のみ使う
+    int argc;
+    Var *var;       // 変数の場合
+    Func *func;     // 関数の場合
+    // Struct *struct_p; // STRUCTの場合に使用
+    // Enum *enm_p;      // なんとなく付けた
+    Node *jump_to;
+    Node *jumped_from;
+    Node **break_to;
+    char *str;
+};
+
+// 変数の型
+typedef enum { 
+    VOID = 1, 
+    INT, 
+    LONG_LONG_INT, 
+    CHAR, 
+    PTR, 
+    ARRAY, 
+    STRUCT, 
+    ENUM,
+} Type;
+
+struct VarType {
+    Type ty;
+    VarType *ptr_to;
+    int array_size;
+    //Struct *struct_p;
+    //Enum *enum_p;
+};
+
+struct Var {
+    Var *next;
+    VarType *type;
+    Node *init;
+    char *name;
+    char *str;
+    int len;
+    int offset;
+    int glb_var;
+};
+
+struct Func {
+    Func *before;
+    Var *type;
+    Var *args;    // arg->nextから
+    Var *locals;  // arg->nextから
+    Node *stmt;
+};
+
+extern char *user_input;
+extern Token *token;
+extern Func now_func;
+extern Var *locals;
+extern Var *globals;
+extern Func *funcs;
+
+// ---------- tokenizer ---------- //
+int consume(char *op);
+Token *consume_kind(TokenKind kind);
+int token_str(char *op);
+int token_kind(TokenKind kind);
+int expect(char *op);
+int expect_number();
+char to_ascii(char *c);
+Token *tokenizer(char *p);
+
+// ---------- parser ---------- //
+VarType *get_typedefed_type();
+Node *create_block_node();
+Node *create_return_node();
+Func *find_func(char *name, int len);
+void parser();
+Func *global();
+Node *func_stmt();
+Node *stmt(Node *cur_node);
+Node *expr();
+Node *assign();
+Node *Ladd();
+Node *Land();
+Node *equality();
+Node *relational();
+Node *add();
+Node *mul();
+Node *unary();
+Node *primary();
+Node *addadd_minusminus(Node *node);
+
+// ---------- stack ---------- //
+long long int stack_pop();
+void stack_push(long long int val);
+long long int stack_get(int offset);
+long long int *get_addr(int offset);
+void stack_set(int offset, long long int val);
+void stack_malloc(int size);
+void call_func_stack();
+void ret_func_stack();
+void print_stack(int len);
+
+// ---------- execute ---------- //
+void execute_main();
+long long int execute_function(Node *node);
+void execute_function_stmt();
+void execute_while();
+void execute_stmt();
+void execute_call_func(Node *node);
+void execute_cal(Node *node);
+long long int get_primary_value(Node *node);
+void execute_printf(Node *node);
+void execute_scanf(Node *node);
+
+// ---------- AST_type ---------- //
+int get_size(VarType *type);
+VarType *AST_type(Node *node);

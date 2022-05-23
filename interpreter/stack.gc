@@ -1,0 +1,78 @@
+#include "cinter.gh"
+
+int stack_size = 10000000;
+long long int stack[10000000];
+
+int RSP = 0;
+int RBP = 0;
+
+long long int stack_pop() {
+    long long int ret;
+    if (RSP == 0) {
+        printf("RSPが0の状態でpopしようとしています");
+        exit(1);
+    }
+    RSP--;
+    return stack[RSP];
+
+    ret = stack[RSP];
+    stack[RSP] = 0;
+    return ret;
+}
+
+void stack_push(long long int val) {
+    if (RSP >= stack_size) {
+        printf("RSPPがstack_sizeを超えます");
+        exit(1);
+    }
+    stack[RSP++] = val;
+}
+
+long long int *get_addr(int offset) {
+    if (RBP + offset >= stack_size) {
+        printf("memoryのindexがstack_sizeを超えています");
+        exit(1);
+    }
+
+    return &stack[RBP + offset];
+}
+
+long long int stack_get(int offset) {
+    if (RBP + offset >= stack_size) {
+        printf("memoryのindexがstack_sizeを超えています");
+        exit(1);
+    }
+    return stack[RBP + offset];
+}
+
+void stack_set(int offset, long long int val) {
+    if (RBP + offset >= stack_size) {
+        printf("memoryのindexがstack_sizeを超えています");
+        exit(1);
+    }
+    stack[RBP + offset] = val;
+}
+
+void stack_malloc(int size) {
+    if (RSP + size >= stack_size) {
+        printf("RSPがstack_sizeを超えてしまいます");
+        exit(1);
+    }
+    RSP += size + 1;
+}
+
+void call_func_stack() {
+    stack[RSP++] = RBP;
+    RBP = RSP;
+}
+
+void ret_func_stack() {
+    RSP = RBP - 1;
+    RBP = stack[RSP];
+}
+
+void print_stack(int len) {
+    int i;
+    for (i = 0; i < len; i++)
+        printf("%lld\n", stack[i]);
+}

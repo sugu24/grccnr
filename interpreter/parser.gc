@@ -1,0 +1,886 @@
+#include "cinter.gh"
+
+typedef struct Control Control;
+struct Control {
+    Node *node;
+    Node *before;
+};
+
+Control *controls = NULL;
+Func *funcs = NULL;
+Func *now_func;
+
+Var *locals = NULL;
+Var *globals = NULL;
+
+int control = 0;
+int str_num = 0;
+
+Node *new_node(NodeKind kind) {
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = kind;
+    return node;
+}
+
+Node *new_binary(NodeKind kind, Node *lhs, Node *rhs) {
+    Node *node = new_node(kind);
+    node->lhs = lhs;
+    node->rhs = rhs;
+    return node;
+}
+
+Node *new_num(int val) {
+    Node *node = new_node(ND_NUM);
+    node->val = val;
+    return node;
+}
+
+Node *new_char(char *c) {
+    Node *node = new_node(ND_CHAR);
+    node->val = to_ascii(c);
+    return node;
+}
+
+Var *find_var(int local, Token *tok) {
+    Var *var;
+    // ローカル変数
+    for (var = locals; var && local; var = var->next) {
+        if (tok->len == var->len && !memcmp(tok->str, var->name, var->len))
+            return var;
+    }
+
+    // グローバル変数
+    for (var = globals; var && local > 1; var = var->next) {
+        if (tok->len == var->len && !memcmp(tok->str, var->name, var->len))
+            return var;
+    }
+
+    return NULL;
+}
+
+Func *find_func(char *name, int len) {
+    Func *func;
+    for (func = funcs; func; func = func->before) {
+        if (func->type->len == len && !memcmp(func->type->name, name, len))
+            return func;
+    }
+
+    if (now_func->type->len == len && !memcmp(now_func->type->name, name, len))
+        return now_func;
+
+    return NULL;
+}
+
+// ヒープ領域にコピーしてそれを指す
+char *str_copy(Token *tok) {
+    int i;
+    int j = 0;
+    char *temp = malloc(sizeof(char) * (tok->len + 1));
+    for (i = 0; i < tok->len; i++) {
+        temp[j] = to_ascii((tok->str + i));
+        if (tok->str[i] == '\\') i++;
+        j++;
+    }
+    temp[j] = '\0';
+    return temp;
+}
+
+// ---------- type ---------- //
+Type get_var_type() {
+    if (consume_kind(TK_VOID))
+        return VOID;
+    else if (consume_kind(TK_INT))
+        return INT;
+    else if (consume_kind(TK_CHAR))
+        return CHAR;
+    else if (consume_kind(TK_LONG)) {
+        if (consume_kind(TK_INT))
+            return INT;
+        else if (consume_kind(TK_LONG)) {
+            if (consume_kind(TK_INT))
+                return LONG_LONG_INT;
+            else {
+                printf("long long int ?");
+                exit(1);
+            }
+        } else {
+            printf("long int or long long int ?");
+            exit(1);
+        }
+    } else
+        return 0;
+}
+
+// 変数の型を返す
+VarType *new_var_type(int type) {
+    VarType *var_type;
+    VarType *temp_type;
+    VarType *top_var_type;
+    Type ty;
+    int typedef_type = 0;
+    top_var_type = calloc(1, sizeof(VarType));
+    var_type = top_var_type;
+
+    // 型取得
+    while (1) {
+        if (consume_kind(TK_TYPEDEF))
+            typedef_type = 1;
+        else if (ty = get_var_type()) {
+            if (var_type->ty) {
+                printf("型は一意に定めなければいけません");
+                exit(1);
+            } else if (type != 2 && ty == VOID) {
+                printf("void型は変数の型として指定できません");
+                exit(1);
+            }
+            var_type->ty = ty;
+        } 
+        /*
+        else if (temp_type = get_typedefed_type()) {
+            if (var_type->ty) {
+                printf("型は一意に定めなければいけません");
+                exit(1);
+            }
+            if (temp_type->ty == STRUCT)
+                var_type->struct_p = temp_type->struct_p;
+            else if (temp_type->enum_p)
+                var_type->enum_p = temp_type->enum_p;
+            var_type->ty = temp_type->ty;
+        }*/
+         else if (consume_kind(TK_STRUCT)) {
+            if (var_type->ty) {
+                printf("型は一意に定めなければいけません");
+                exit(1);
+            }
+            var_type->ty = STRUCT;
+            //var_type->struct_p = new_struct();
+        } else if (consume_kind(TK_ENUM)) {
+            if (var_type->ty) {
+                printf("型は一意に定めなければいけません"); 
+                exit(1);
+            }
+            var_type->ty = INT;
+            //var_type->enum_p = new_enum();
+        } else
+            break;
+    }
+
+    // type=0 (arg) なら typedef_typeはないはず
+    if (typedef_type && type == 0) {
+        printf("引数ではtypedef宣言できません");
+        exit(1);
+    }
+
+    // 変数宣言なし
+    if (!var_type->ty)
+        return NULL;
+    
+    // ポインタ取得
+    while (consume("*")) {
+        top_var_type = calloc(1, sizeof(VarType));
+        top_var_type->ty = PTR;
+        top_var_type->ptr_to = var_type;
+        var_type = top_var_type;
+    }
+
+    return top_var_type;
+}
+
+// RBPからのオフセットを設定
+void set_offset(Var **var, int type) {
+    int offset = get_size((*var)->type);
+
+    if (type == 2)
+        (*var)->offset = offset;
+    else if (locals)
+        (*var)->offset = locals->offset + offset;
+    else
+        (*var)->offset = offset - 1;
+}
+
+// 変数の宣言 失敗なら途中でexitされる
+// type: 0->arg 1->locals 2->globals
+Var *declare_var(int type) {
+    Token *tok_var_name;
+    VarType *array_top;
+    VarType *array_bfr;
+    VarType *array_now;
+    Var *var = calloc(1, sizeof(Var));
+
+    // 変数の型
+    var->type = new_var_type(type);
+    if (!var->type)
+        return NULL;
+    
+    // 変数名
+    tok_var_name = consume_kind(TK_IDENT);
+    if (!tok_var_name) {
+        /*
+        if (var->type->ty == STRUCT || var->type->enum_p) {
+            // structかつvar_nameがない -> structの定義だけ
+            expect(";");
+            return NULL;
+        }
+        */
+        printf("there is no val name\n");
+        exit(1);
+    }
+
+    if (find_var(type, tok_var_name)) {
+        printf("declared val name\n");
+        exit(1);
+    }
+
+    var->name = tok_var_name->str;
+    var->len = tok_var_name->len;
+
+    // 関数ならreturn グローバル変数なら var->glb_var = 1
+    if (type == 2) {
+        if (token_str("(")) 
+            // 関数
+            return var;
+        else 
+            // グローバル変数
+            var->glb_var = 1;
+    }
+
+    // []?
+    if (token_str("[")) {
+        array_top = array_bfr = calloc(1, sizeof(VarType));
+        while (consume("[")) {
+            array_now = calloc(1, sizeof(VarType));
+            array_now->ty = ARRAY;
+            array_bfr->ptr_to = array_now;
+            if (token_kind(TK_NUM)) {
+                array_now->array_size = expect_number();
+                if (array_now->array_size <= 0) {
+                    printf("配列のサイズは正の整数である必要があります\n");
+                    exit(1);
+                }
+            } else if (array_bfr != array_top) {
+                printf("配列の要素数省略は最高次元の場合のみ可です\n");
+                exit(1);
+            }
+            array_bfr = array_now;
+            expect("]");
+        }
+        array_bfr->ptr_to = var->type;
+        var->type = array_top->ptr_to;
+    }
+
+    // RBPからのオフセット
+    set_offset(&var, type);
+
+    if (type == 0 || consume(";"))
+        return var;
+
+    printf("%s\n", token->str);    
+    printf(" ; is needed\n");
+    exit(1);
+}
+
+void parser() {
+    Func *f;
+    Token *tok;
+    while (!consume_kind(TK_EOF)) {
+        tok = token;
+        f = global();
+        if (f) {
+            f->before = funcs;
+            funcs = f;
+        } else if (tok == token) {
+            printf("can't procedure\n");
+            exit(1);
+        }
+    }
+}
+
+Func *global() {
+    Func *func;
+    Var *var;
+    VarType *temp;
+    if (!(var = declare_var(2)))
+        // typedef, struct, enum の場合
+        return NULL;
+    else if (consume("(")) {
+        // 関数の定義か宣言の場合
+        if (var->init) {
+            printf("can't initialize function\n");
+            exit(1);
+        }
+
+        // funcの初期化
+        func = calloc(1, sizeof(Func));
+        func->type = var;
+
+        // localsの初期化とfuncのローカル変数初期化
+        locals = NULL;
+        while (1) {
+            if (var = declare_var(0)) {
+                // 配列の場合はポインタに変換(配列はアドレスを貰うため)
+                temp = var;
+                while (temp->ty == ARRAY) {
+                    temp->ty = PTR;
+                    temp->array_size = 0;
+                    temp = temp->ptr_to;
+                }
+
+                var->next = locals;
+                locals = var;
+            }
+
+            if (consume(","))
+                continue;
+            else if (consume(")"))
+                break;
+            else {
+                printf("function args cut off comma and function args are ended ).");
+                exit(1);
+            }
+        }
+
+        now_func = func;
+        func->args = locals;
+        controls = NULL;
+        expect("{");
+        func->stmt = func_stmt();
+        func->locals = locals;
+        return func;
+    }
+}
+
+Node *func_stmt() {
+    Node *head_node;
+    Node *cur_node;
+    Node *node;
+    Var *var;
+
+    head_node = cur_node = calloc(1, sizeof(Node));
+    while (1) {
+        if (var = declare_var(1)) {
+            var->next = locals;
+            locals = var;
+            if (!var->init) continue;
+            node = var->init;
+        } else {
+            if (!(node = stmt(cur_node))) {
+                if (!controls) break;
+                else continue;
+            }
+        }
+        
+        cur_node->next_stmt = node;
+        while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
+    }
+    return head_node;
+}
+
+// l->r, m->l
+void set_jump_to(Node *l, Node *m, Node *r) {
+    l->jump_to = r;
+    r->jumped_from = l;
+    if (l->kind != ND_FOR && l->kind != ND_WHILE) return;
+    m->jump_to = l;
+    l->jumped_from = m;
+}
+
+Node *stmt(Node *cur_node) {
+    Node *node = NULL;
+    Node *end_node;
+    Var *var;
+    Control *c;
+    
+    if (consume("{")) {
+        c = calloc(1, sizeof(Control));
+        c->node = new_node(ND_BLOCK);
+        c->before = controls;
+        controls = c;
+        return c->node;
+    } 
+    else if (consume("}")) {
+        node = new_node(ND_BLOCK_END);
+        
+        if (!controls) {
+            return NULL;
+        }
+
+        c = controls;
+        controls = c->before;
+        
+        if (c->node->kind == ND_BLOCK) {
+            if (controls && !controls->node->kind != ND_BLOCK) {
+                end_node = new_node(ND_CONTROL_END);
+                node->next_stmt = end_node;
+                set_jump_to(controls->node, node, end_node);
+                controls = controls->before;
+                return node;
+            } else {
+                return node;
+            }
+        } 
+        
+        printf("対応する } がありません\n");
+        exit(1);
+    }
+    else if (consume_kind(TK_WHILE)) {
+        c = calloc(1, sizeof(Control));
+        node = new_node(ND_WHILE);
+        c->node = node;
+        expect("(");
+        node->lhs = expr();
+        expect(")");
+        
+        c->before = controls;
+        controls = c;
+        return node;
+    }
+    else if (consume_kind(TK_FOR)) {
+        c = calloc(1, sizeof(Control));
+        node = new_node(ND_FOR_START);
+        node->next_stmt = new_node(ND_FOR);
+        c->node = node->next_stmt;
+        expect("(");
+        node->next_stmt->lhs = expr();
+        expect(";");
+        node->next_stmt->mhs = expr();
+        expect(";");
+        node->next_stmt->rhs = expr();
+        expect(")");
+        
+        c->before = controls;
+        controls = c;
+        return node;
+    }
+    else if (consume_kind(TK_IF)) {
+        c = calloc(1, sizeof(Control));
+        node = new_node(ND_IF);
+        c->node = node;
+        expect("(");
+        node->lhs = expr();
+        expect(")");
+
+        c->before = controls;
+        controls = c;
+        return node;
+    }
+    else if (consume_kind(TK_ELSE)) {
+        if (cur_node && cur_node->kind == ND_CONTROL_END && 
+            (cur_node->jumped_from->kind == ND_IF || cur_node->jumped_from->kind == ND_ELSE_IF)) {
+            if (consume_kind(TK_IF)) {
+                node = new_node(ND_ELSE_IF);
+                expect("(");
+                node->lhs = expr();
+                expect(")");
+            } 
+            else
+                node = new_node(ND_ELSE);
+                
+            cur_node->jumped_from->next_if_else = node;
+
+            c = calloc(1, sizeof(Control));
+            c->node = node;
+
+            c->before = controls;
+            controls = c;
+            return node;
+        } else {
+            printf("else が予期しない場所にあります\n");
+            exit(1);
+        }
+    }
+    else if (consume_kind(TK_SWITCH)) {
+        c = calloc(1, sizeof(Control));
+        node = new_node(ND_SWITCH);
+        c->node = node;
+        expect("(");
+        node->lhs = expr();
+        expect(")");
+
+        c->before = controls;
+        controls = c;
+        return node;
+    }
+    else if (consume_kind(TK_CASE)) {
+        c = controls;
+        while (c) {
+            if (c->node->kind == ND_SWITCH)
+                break;
+            c = c->before;
+        }
+        if (!c) {
+            printf("caseがswitch文の中に来ていません\n");
+            exit(1);
+        }
+
+        node = new_node(ND_CASE);
+        node->lhs = expr();
+        expect(":");
+        
+        if (node->lhs->kind != ND_NUM && node->lhs->kind != ND_CHAR) {
+            printf("caseで指定する値は定数である必要があります\n");
+            exit(1);
+        }
+
+        end_node = c->node;
+        while (end_node->next_if_else) end_node = end_node->next_if_else;
+        end_node->next_if_else = node;
+        return node;
+    }
+    else if (consume_kind(TK_DEFAULT)) {
+        c = controls;
+        while (c) {
+            if (c->node->kind == ND_SWITCH)
+                break;
+            c = c->before;
+        }
+        if (!c) {
+            printf("caseがswitch文の中に来ていません\n");
+            exit(1);
+        }
+
+        node = new_node(ND_DEFAULT);
+        expect(":");
+        
+        end_node = c->node;
+        while (end_node->next_if_else) end_node = end_node->next_if_else;
+        end_node->next_if_else = node;
+        return node;
+    }
+    else if (consume_kind(TK_RETURN)) {
+        node = new_node(ND_RETURN);
+        node->lhs = expr();
+
+        if (controls && controls->node->kind != ND_BLOCK) {
+            end_node = new_node(ND_CONTROL_END);
+            set_jump_to(controls->node, node, end_node);
+            controls = controls->before;
+            node->next_stmt = end_node;
+        }
+    }
+    else if (consume_kind(TK_CONTINUE)) {
+        node = new_node(ND_CONTINUE);
+        for (c = controls; c; c = c->before) {
+            if (c->node->kind == ND_FOR || c->node->kind == ND_WHILE) {
+                node->jump_to = c->node;
+                break;
+            }
+        }
+
+        if (!node->jump_to) {
+            printf("continueはloop内で使用してください\n");
+            exit(1);
+        }
+
+        if (controls && controls->node->kind != ND_BLOCK) {
+            end_node = new_node(ND_CONTROL_END);
+            set_jump_to(controls->node, node, end_node);
+            controls = controls->before;
+            node->next_stmt = end_node;
+        }
+    }
+    else if (consume_kind(TK_BREAK)) {
+        node = new_node(ND_BREAK);
+        c = controls;
+
+        for (; c; c = c->before) {
+            if (c->node->kind == ND_FOR || c->node->kind == ND_WHILE || c->node->kind == ND_SWITCH) {
+                node->break_to = &c->node->jump_to;
+                break;
+            }
+        }
+
+        if (!node->break_to) {
+            printf("breakはloop内で使用してください\n");
+            exit(1);
+        }
+
+        if (controls && controls->node->kind != ND_BLOCK) {
+            end_node = new_node(ND_CONTROL_END);
+            set_jump_to(controls->node, node, end_node);
+            controls = controls->before;
+            node->next_stmt = end_node;
+        }
+    }
+    else {
+        node = expr();
+        
+        if (controls && controls->node->kind != ND_BLOCK) {
+            end_node = new_node(ND_CONTROL_END);
+            set_jump_to(controls->node, node, end_node);
+            controls = controls->before;
+            node->next_stmt = end_node;
+        }
+    }
+    expect(";");
+    return node;
+}
+
+Node *expr() {
+    Node *node = assign();
+    return node;
+}
+
+Node *assign() {
+    Node *node = Ladd();
+
+    if (consume("=")) 
+        node = new_binary(ND_ASSIGN, node, assign());
+    else if (consume("+="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_ADD, node, assign()));
+    else if (consume("-="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_SUB, node, assign()));
+    else if (consume("*="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_MUL, node, assign()));
+    else if (consume("/="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_DIV, node, assign()));
+    else if (consume("%="))
+        node = new_binary(ND_ASSIGN, node, new_binary(ND_MOD, node, assign()));
+    return node;
+}
+
+Node *Ladd() {
+    Node *node = Land();
+    
+    while(1) {
+        if (consume("||")) 
+            node = new_binary(ND_LOGICAL_ADD, node, Ladd());
+        else
+            return node;
+    }
+}
+
+Node *Land() {
+    Node *node = equality();
+    
+    while(1) {
+        if (consume("&&"))
+            node = new_binary(ND_LOGICAL_AND, node, Land());
+        else
+            return node;
+    }
+}
+
+Node *equality() {
+    Node *node = relational();
+    
+    while(1) {
+		if (consume("=="))
+			node = new_binary(ND_EQ, node, relational());
+		else if (consume("!="))
+			node = new_binary(ND_NE, node, relational());
+		else
+			return node;
+	}
+}
+
+Node *relational() {
+    Node *node = add();
+    
+    while(1) {
+		if (consume("<"))
+			node = new_binary(ND_LT, node, add());
+		else if (consume("<="))
+			node = new_binary(ND_LE, node, add());
+		else if (consume(">"))
+			node = new_binary(ND_LT, add(), node);
+		else if (consume(">="))
+			node = new_binary(ND_LE, add(), node);
+		else
+			return node;
+	}
+}
+
+Node *add() {
+    Node *node = mul();
+
+    while (1) {
+        if (consume("+"))
+            node = new_binary(ND_ADD, node, mul());
+        else if (consume("-"))
+            node = new_binary(ND_SUB, node, mul());
+        else
+            return node;
+    }
+}
+
+Node *mul() {
+    Node *node = unary();
+
+    while (1) {
+        if (consume("*"))
+            node = new_binary(ND_MUL, node, unary());
+        else if (consume("/"))
+            node = new_binary(ND_DIV, node, unary());
+        else if (consume("%"))
+            node = new_binary(ND_MOD, node, unary());
+        else
+            return node;
+    }
+}
+
+Node *unary() {
+    Node *node;
+
+    if (consume("+"))
+        return unary();
+    else if (consume("-"))
+        return new_binary(ND_SUB, new_num(0), unary());
+    else if (consume("!"))
+        return new_binary(ND_NOT, unary(), NULL);
+    else if (consume("*")) 
+        return new_binary(ND_DEREF, primary(), NULL);
+    else if (consume("&")) {
+        node = primary();
+        if (node->kind == ND_LVAR || 
+            node->kind == ND_VAR_ADD || 
+            node->kind == ND_VAR_SUB)
+            return new_binary(ND_ADDR, primary(), NULL);
+        else {
+            printf("only var after &\n");
+            exit(1);
+        }
+    }
+    else if (consume_kind(TK_SIZEOF)) {}
+    return primary();
+}
+
+Node *primary() {
+    Token *tok;
+    Node *node;
+    Node *arg;
+    Node *args;
+    Node *args_head;
+    int argc;
+
+    if (consume("(")) {
+        node = assign();
+        expect(")");
+        return node;
+    }
+
+    if (tok = consume_kind(TK_IDENT)) {
+        if (consume("(")) {
+            // 関数の場合
+            if (tok->len == 6 && !memcmp(tok->str, "printf", tok->len))
+                node = new_node(ND_PRINTF);
+            else if (tok->len == 5 && !memcmp(tok->str, "scanf", tok->len))
+                node = new_node(ND_SCANF);
+            else {
+                node = new_node(ND_CALL_FUNC);
+                node->func = find_func(tok->str, tok->len);
+                if (!node->func) {
+                    printf("該当する関数はありませんでした\n");
+                    exit(1);
+                }
+            }
+            
+            args_head = args = calloc(1, sizeof(Node));
+            argc = 0;
+            if (!consume(")")) {
+                while (1) {
+                    if (!(arg = expr())) {
+                        printf("関数の呼び出し元の引数が処理できません\n");
+                        exit(1);
+                    }
+
+                    args->next_stmt = arg;
+                    args = arg;
+                    argc++;
+                    
+                    if (consume(",")) {}
+                    else if (consume(")")) break;
+                    else { printf("関数の呼び出し元の引数の次が処理できません\n"); exit(1); } 
+                }
+            }
+            node->args = args_head;
+            node->argc = argc;
+        }
+        else {
+            node = new_node(ND_LVAR);
+            if (!(node->var = find_var(3, tok))) {
+                printf("there i   s no var name\n");
+                exit(1);
+            }
+
+            node = addadd_minusminus(node);
+        }
+    }
+    else if (tok = consume_kind(TK_NUM))
+        node = new_num(tok->val);
+    else if (tok = consume_kind(TK_STR)) {
+        node = new_node(ND_STR);
+        node->str = str_copy(tok);
+    } else if (tok = consume_kind(TK_ONE_CHAR)) {
+        node = new_node(ND_CHAR);
+        node->val = to_ascii(tok->str);
+    }
+
+    return node;
+}
+
+Node *addadd_minusminus(Node *node) {
+    if (consume("++"))
+        node = new_binary(ND_VAR_ADD, node, NULL);
+    else if (consume("--"))
+        node = new_binary(ND_VAR_SUB, node, NULL);
+    return node;
+}
+
+Node *attach(Node *node) {
+    Node *mem_node;
+    Var *var;
+    Token *tok;
+    VarType *type = AST_type(0, node);
+    
+    // (assign), ->membar, .membar, [assign] の繰り返し
+	while (true) {
+        if (consume("[")) {
+            if (type->ty != PTR && type->ty != ARRAY)
+                error_at(token->str, "ポインタか配列に添え字を付けてください");
+            node = new_binary(ND_INDEX, new_binary(ND_ADD, node, assign()), NULL);
+            expect("]");
+            type = type->ptr_to;
+        }
+
+
+        /*
+        else if (consume(".")) {
+            if (type->ty != STRUCT)
+                error_at(token->str, "左の候がstructでははありません");
+            if (!(tok = consume_kind(TK_IDENT)))
+                error_at(token->str, "メンバ変数である必要があります");
+            if (!(lvar = get_membar(type->struct_p, tok)))
+                error_at(token->str, "メンバ変数である必要があります");
+            node->access = 1;
+            mem_node = new_node(ND_MEMBAR);
+            mem_node->lvar = lvar;
+            node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
+            type = lvar->type;
+        }
+        else if (consume("->")) {
+            if (type->ty != PTR || type->ptr_to->ty != STRUCT)
+                error_at(token->str, "左の候がstructのポインタではありません");
+            if (!(tok = consume_kind(TK_IDENT)))
+                error_at(token->str, "メンバ変数である必要があります");
+            if (!(lvar = get_membar(type->ptr_to->struct_p, tok)))
+                error_at(token->str, "メンバ変数である必要があります");
+            node->access = 2;
+            mem_node = new_node(ND_MEMBAR);
+            mem_node->lvar = lvar;
+            node = new_binary(ND_DEREF, node, NULL);
+            node->access = 1;
+            node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
+            type = lvar->type;
+            if (type->ty == PTR && type->ptr_to->ty == STRUCT)
+                type->ptr_to->struct_p = get_struct(type->ptr_to->struct_p->name, type->ptr_to->struct_p->len);
+        }
+        */
+
+        
+        else
+            break;
+        // 1つ前のlhsはデータが欲しいわけではない
+        
+    }
+    return node;
+}

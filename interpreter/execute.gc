@@ -1,0 +1,593 @@
+#include "cinter.gh"
+
+typedef struct ControlInfo ControlInfo;
+
+struct ControlInfo {
+    ControlInfo *before;
+    Node *node;
+    int loop;
+    int true;
+};
+
+Node *exec_node;
+ControlInfo *control_infos = NULL;
+
+// nodeからRBPからのoffsetを返す
+int get_offset(Var *var) {
+    return var->offset;
+}
+
+void delete_control_infos() {
+    ControlInfo *info;
+    info = control_infos;
+    control_infos = control_infos->before;
+    free(info);
+}
+
+void execute_main() {
+    Func *func = find_func("main", 4);
+    if (func) {
+        exec_node = func->stmt;
+        if (func->locals) stack_malloc(func->locals->offset);
+        execute_function_stmt();
+    } else {
+        printf("there is not main function\n");
+        exit(1);
+    }
+}
+
+void execute_call_func(Node *node) {
+    long long int val;
+    Node *execed_node = exec_node;
+
+    val = execute_function(node);
+
+    stack_push(val);
+    exec_node = execed_node;
+}
+
+long long int execute_function(Node *node) {
+    Node *arg_node;
+    Var *arg_var;
+    int offset;
+    long long int val;
+    int arg[100];
+    int i;
+    
+    // 呼び出し元argをpush (headからpush)
+    arg_node = node->args;
+    for (i = 0; i < 100 && (arg_node = arg_node->next_stmt); i++) {
+        execute_cal(arg_node);
+        arg[i] = stack_pop();
+    }
+    
+    // RBPを更新してstackの領域確保
+    call_func_stack();
+    if (node->func->locals) stack_malloc(node->func->locals->offset);
+    
+    // 関数でargに代入
+    arg_var = node->func->args;
+    for (i = i - 1; arg_var; i--) {
+        offset = get_offset(arg_var);
+        val = arg[i];
+        stack_set(offset, val);
+        arg_var = arg_var->next;
+    }
+    
+    // 関数のstmtを実行
+    exec_node = node->func->stmt;
+    execute_function_stmt();
+    // 戻り値取得
+    if (exec_node->kind == ND_RETURN) {
+        if (exec_node->lhs)
+            execute_cal(exec_node->lhs);
+        else
+            stack_push(0);
+    }
+    val = stack_pop();
+
+    // rbp, rspを戻す
+    ret_func_stack();
+    return val;
+}
+
+void set_next_exec_node() {
+    switch (exec_node->kind) {
+        case ND_WHILE:
+        case ND_FOR:
+        case ND_IF:
+        case ND_ELSE_IF:
+        case ND_ELSE:
+            exec_node = exec_node->next_stmt;
+            break;
+        case ND_CONTINUE:
+            exec_node = exec_node->jump_to;
+            break;
+        case ND_BREAK:
+            exec_node = *exec_node->break_to;
+            break;
+        default:
+            if (exec_node->jump_to)
+                exec_node = exec_node->jump_to;
+            else
+                exec_node = exec_node->next_stmt;
+    }
+}
+
+void execute_function_stmt() {
+    exec_node = exec_node->next_stmt;
+    while (exec_node) {
+        if (exec_node->kind == ND_RETURN) 
+            break;
+
+        execute_stmt();
+
+        set_next_exec_node();
+    }
+}
+
+void execute_while() {
+    execute_cal(exec_node->lhs);
+    long long int a = stack_pop();
+    printf("while %lld\n", a);
+    if (!a)
+        exec_node = exec_node->jump_to;
+}
+
+void execute_for() {
+    printf("for loop %d\n", control_infos->loop);
+    if (control_infos->loop == 0) {
+        if (exec_node->lhs) execute_cal(exec_node->lhs);
+    } else {
+        if (exec_node->rhs) {
+            execute_cal(exec_node->rhs);
+            stack_pop();
+        }
+    }
+
+    if (exec_node->mhs) 
+        execute_cal(exec_node->mhs);
+    else
+        stack_push(1);
+
+    control_infos->loop++;
+    if (!stack_pop()) {
+        exec_node = exec_node->jump_to;
+        delete_control_infos();
+    }
+}
+
+void execute_if() {
+    if (exec_node->lhs)
+        execute_cal(exec_node->lhs);
+    else {
+        printf("if節の条件式がありません\n");
+        exit(1);
+    }
+
+    if (!exec_node->next_if_else)
+        delete_control_infos();
+
+    if (stack_pop()) {
+        if (exec_node->next_if_else) control_infos->true = 1;
+    } else 
+        exec_node = exec_node->jump_to;
+}
+
+void execute_else_if() {
+    if (control_infos->true)
+        stack_push(0);
+    else if (exec_node->lhs)
+        execute_cal(exec_node->lhs);
+    else {
+        printf("else if節の条件式がありません\n");
+        exit(1);
+    }
+
+    if (!exec_node->next_if_else)
+        delete_control_infos();
+
+    if (stack_pop()) {
+        if (exec_node->next_if_else) control_infos->true = 1;
+    } else
+        exec_node = exec_node->jump_to;
+}
+
+void execute_else() {
+    if (control_infos->true)
+        stack_push(0);
+    else
+        stack_push(1);
+    
+    if (!stack_pop())
+        exec_node = exec_node->jump_to;
+    delete_control_infos();
+}
+
+void execute_switch() {
+    long long int a;
+    Node *case_node;
+    execute_cal(exec_node->lhs);
+    a = stack_pop();
+
+    case_node = exec_node->next_if_else;
+    while (case_node) {
+        if (case_node->kind == ND_DEFAULT) {
+            exec_node = case_node;
+            break;
+        }
+        execute_cal(case_node->lhs);
+        if (a == stack_pop()) {
+            exec_node = case_node;
+            break;
+        }
+        case_node = case_node->next_if_else;
+    }
+
+    if (!case_node)
+        exec_node = exec_node->jump_to;
+}
+
+void execute_stmt() {
+    ControlInfo *control_info;
+    switch (exec_node->kind) {
+        case ND_RETURN:
+            return;
+        case ND_FOR_START:
+            control_info = calloc(1, sizeof(ControlInfo));
+            control_info->before = control_infos;
+            control_info->node = exec_node->next_stmt;
+            control_infos = control_info;
+            return;
+        case ND_WHILE:
+            printf("while %p\n", exec_node);
+            execute_while();
+            return;
+        case ND_FOR:
+            if (control_infos->node->kind != ND_FOR) {
+                printf("forのControlInfoではありません\n");
+                exit(1);
+            }
+            execute_for();
+            return;
+        case ND_IF:
+            control_info = calloc(1, sizeof(ControlInfo));
+            control_info->before = control_infos;
+            control_info->node = exec_node;
+            control_infos = control_info;
+            execute_if();
+            return;
+        case ND_ELSE_IF:
+            if (control_infos->node->kind != ND_IF) {
+                printf("else ifのControlInfoではありません\n");
+                exit(1);
+            }
+            execute_else_if();
+            return;
+        case ND_ELSE:
+            if (control_infos->node->kind != ND_IF) {
+                printf("elseのControlInfoではありません\n");
+                exit(1);
+            }
+            execute_else();
+            return;
+        case ND_SWITCH:
+            execute_switch();
+            return;
+        case ND_CASE:
+            return;
+        case ND_DEFAULT:
+            return;
+        case ND_CONTINUE:
+            return;
+        case ND_BREAK:
+            return;
+        case ND_BLOCK:
+            return;
+        case ND_BLOCK_END:
+            return;
+        case ND_CONTROL_END:
+            return;
+    }
+    
+    execute_cal(exec_node);
+    stack_pop();
+}
+
+void execute_cal(Node *node) {
+    long long int a;
+    long long int b;
+    long long int *pa;
+    long long int *addr;
+    int offset;
+    
+    switch (node->kind) {
+        case ND_ASSIGN:
+            offset = get_offset(node->lhs->var);
+            execute_cal(node->rhs);
+            a = stack_pop();
+            stack_set(offset, a);
+            stack_push(a);
+            return;
+        case ND_ADD:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a + b);
+            return;
+        case ND_SUB:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a - b);
+            return;
+        case ND_MUL:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a * b);
+            return;
+        case ND_DIV:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a / b);
+            return;
+        case ND_MOD:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a % b);
+            return;
+
+        case ND_LOGICAL_ADD:
+            execute_cal(node->lhs);
+            b = stack_pop();
+            if (b) {
+                stack_push(1);
+            } else {
+                execute_cal(node->rhs);
+                a = stack_pop();
+                stack_push(a);
+            }
+            return;
+        case ND_LOGICAL_AND:
+            execute_cal(node->lhs);
+            b = stack_pop();
+            if (!b) {
+                stack_push(0);
+            } else {
+                execute_cal(node->rhs);
+                a = stack_pop();
+                stack_push(a);
+            }
+            return;
+        
+        case ND_EQ:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a == b);
+            return;
+        case ND_NE:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a != b);
+            return;
+        case ND_LT:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a < b);
+            return;
+        case ND_LE:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            stack_push(a <= b);
+            return;
+        case ND_NOT:
+            execute_cal(node->lhs);
+            a = stack_pop();
+            stack_push(!a);
+            return;
+        case ND_LVAR:
+            a = get_primary_value(node);
+            stack_push(a);
+            return;
+        case ND_NUM:
+            stack_push(node->val);
+            return;
+        case ND_CHAR:
+            stack_push(node->val);
+            return;
+        case ND_CALL_FUNC:
+            execute_call_func(node);
+            return;
+        case ND_VAR_ADD:
+            a = get_primary_value(node->lhs);
+            offset = get_offset(node->lhs->var);
+            a++;
+            //printf("a++ %d\n", a);
+            stack_set(offset, a);
+            stack_push(a);
+            return;
+        case ND_VAR_SUB:
+            a = get_primary_value(node->lhs);
+            offset = get_offset(node->lhs->var);
+            a--;
+            stack_set(offset, a);
+            stack_push(a);
+            return;
+        case ND_PRINTF:
+            execute_printf(node);
+            stack_push(0);
+            return;
+        case ND_SCANF:
+            execute_scanf(node);
+            stack_push(0);
+        case ND_STR:
+            stack_push( (long long int)node->str );
+            return;
+        case ND_CHAR:
+            stack_push(node->val);
+            return;
+        case ND_ADDR:
+            // node->kindによって引数を変える
+            offset = get_offset(node->lhs->var);
+            addr = get_addr(offset);
+            stack_push( (long long int)addr );
+            return;
+        case ND_DEREF:
+            execute_cal(node->lhs);
+            pa = (long long int *)stack_pop();
+            stack_push(*pa);
+            return;
+    }
+}
+
+long long int get_primary_value(Node *node) {
+    int offset;
+    offset = get_offset(node->var);
+    return stack_get(offset);
+}
+
+
+
+// -------------- execute printf scanf -------------- //
+
+// -------------- printf 実行 引数6個まで -------------- //
+void execute_printf(Node *node) {
+    Node *arg;
+    int argc_ = node->argc;
+    long long int arg1;
+    long long int arg2;
+    long long int arg3;
+    long long int arg4;
+    long long int arg5;
+    long long int arg6;
+    if (argc_ > 6) {
+        printf("printfの引数は6個以下");
+        exit(1);
+    } else if (argc_ == 0) {
+        printf("printfの引数が0個です");
+        exit(1);
+    }
+
+    arg = node->args->next_stmt;
+    if (argc_ > 0) {
+        execute_cal(arg);
+        arg1 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 1) 
+            printf(arg1);
+    }
+    if (argc_ > 1) {
+        execute_cal(arg);
+        arg2 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 2) 
+            printf(arg1, arg2);
+    }
+    if (argc_ > 2) {
+        execute_cal(arg);
+        arg3 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 3) 
+            printf(arg1, arg2, arg3);
+    }
+    if (argc_ > 3) {
+        execute_cal(arg);
+        arg4 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 4) 
+            printf(arg1, arg2, arg3, arg4);
+    }
+    if (argc_ > 4) {
+        execute_cal(arg);
+        arg5 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 5) 
+            printf(arg1, arg2, arg3, arg4, arg5);
+    }
+    if (argc_ > 5) {
+        execute_cal(arg);
+        arg6 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 6) 
+            printf(arg1, arg2, arg3, arg4, arg5, arg6);
+    }
+}
+
+// -------------- scanf 実行 引数6個まで -------------- //
+void execute_scanf(Node *node) {
+    Node *arg;
+    int argc_ = node->argc;
+    long long int arg1;
+    long long int arg2;
+    long long int arg3;
+    long long int arg4;
+    long long int arg5;
+    long long int arg6;
+    if (argc_ > 6) {
+        printf("scanfの引数は6個以下");
+        exit(1);
+    } else if (argc_ <= 1) {
+        printf("scanffの引数が足りません");
+        exit(1);
+    }
+
+    arg = node->args->next_stmt;
+    if (argc_ > 0) {
+        execute_cal(arg);
+        arg1 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 1) 
+            scanf(arg1);
+    }
+    if (argc_ > 1) {
+        execute_cal(arg);
+        arg2 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 2) 
+            scanf(arg1, arg2);
+    }
+    if (argc_ > 2) {
+        execute_cal(arg);
+        arg3 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 3) 
+            scanf(arg1, arg2, arg3);
+    }
+    if (argc_ > 3) {
+        execute_cal(arg);
+        arg4 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 4) 
+            scanf(arg1, arg2, arg3, arg4);
+    }
+    if (argc_ > 4) {
+        execute_cal(arg);
+        arg5 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 5) 
+            scanf(arg1, arg2, arg3, arg4, arg5);
+    }
+    if (argc_ > 5) {
+        execute_cal(arg);
+        arg6 = stack_pop();
+        arg = arg->next_stmt;
+        if (argc_ == 6) 
+            scanf(arg1, arg2, arg3, arg4, arg5, arg6);
+    }
+}
