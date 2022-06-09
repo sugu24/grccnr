@@ -97,7 +97,7 @@ void gen_addr(Node *node) {
             printf("  push rax\n");
             return;
         default:
-            error("左辺の型を処理できません");
+            error("左辺の型を処理できません %d", node->kind);
     }
     
 }
@@ -232,7 +232,7 @@ void gen_stmt(Node *node) {
             while (case_node = case_node->next_if_else) {
                 switch (case_node->kind) {
                     case ND_CASE:
-                        printf("  mov rax, %d\n", case_node->rhs->val);
+                        printf("  mov rax, %lld\n", case_node->rhs->val);
                         printf("  cmp rax, rdi\n");
                         printf("  sete al\n");
                         printf("  movzb rax, al\n");
@@ -277,7 +277,8 @@ void gen_stmt(Node *node) {
             printf("  ret\n");
             return;
         case ND_NUM:
-            printf("  push %d\n", node->val);
+            printf("  movq rax, %lld\n", node->val);
+            printf("  push rax\n");
             return;
         case ND_CHAR:
             printf("  mov rax, %d\n", (int)node->val);
@@ -339,8 +340,8 @@ void gen_stmt(Node *node) {
                 printf("  sub rax, %d\n", node->offset);
             }
             
-            // アクセス中または配列、構造体は単体だとアドレス
-            if (!node->access && node->lvar->type->ty != ARRAY && node->lvar->type->ty != STRUCT) {
+            // アクセス中または配列は単体だとアドレス
+            if (!node->access && node->lvar->type->ty != ARRAY) {
                 mov_rax_data(node);
             }
 
@@ -387,18 +388,21 @@ void gen_stmt(Node *node) {
 
             size = get_size(AST_type(0, node->lhs));
             
-            printf("  pop rdi\n");
             printf("  pop rax\n");
+            printf("  pop rdi\n");
+
+            if (node->control)
+                printf("  cltq\n");
 
             // charなら1バイトのみ書き込まれる
             if (size == 1)
-                printf("  mov [rax], dil\n");
+                printf("  mov [rdi], al\n");
             // int ポインタなどは4,8バイト
             else if (size == 4)
-                printf("  mov [rax], edi\n");
+                printf("  mov [rdi], eax\n");
             else 
-                printf("  mov [rax], rdi\n");
-            printf("  push rdi\n");
+                printf("  mov [rdi], rax\n");
+            printf("  push rax\n");
             return;
     }
 
@@ -506,7 +510,7 @@ void gen_initialize_global_var(Node *node) {
             gen_initialize_global_var(node->rhs);
             return;
         case ND_NUM:
-            printf("%d", node->val);
+            printf("%lld", node->val);
             return;
         case ND_ADDR:
             printf(".%s", node->lhs->lvar->name);
@@ -543,7 +547,8 @@ void gen_initialize_data(LVar *glb_var) {
             offset += glb_ini->stmt->rhs->lvar->len + 1;
         } else {
             // var(lhs) = assign(rhs)
-            switch (get_size(AST_type(0, glb_ini->stmt->rhs))) {
+            //switch (get_size(AST_type(0, glb_ini->stmt->rhs))) {
+            switch (get_size(get_type(AST_type(0, glb_ini->stmt->lhs)))) {
                 case 1:
                     printf("  .byte ");
                     offset += 1;

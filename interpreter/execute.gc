@@ -13,8 +13,29 @@ Node *exec_node;
 ControlInfo *control_infos = NULL;
 
 // nodeからRBPからのoffsetを返す
-int get_offset(Var *var) {
-    return var->offset;
+void get_offset(Node *node) {
+    long long int a;
+    long long int b;
+    long long int p;
+
+    switch (node->kind) {
+        case ND_LVAR:
+            p = (long long int)get_addr(node->var->glb_var, node->var->offset);
+            break;
+        case ND_DEREF:
+            execute_cal(node->lhs);
+            p = stack_pop();
+            break;
+        case ND_INDEX:
+            execute_cal(node->lhs);
+            p = stack_pop();
+            // printf("offset %lld %lld\n", b, a);
+            break;
+        default:
+            printf("can't get offset\n");
+            exit(1);
+    }
+    stack_push(p);
 }
 
 void delete_control_infos() {
@@ -49,9 +70,9 @@ void execute_call_func(Node *node) {
 long long int execute_function(Node *node) {
     Node *arg_node;
     Var *arg_var;
-    int offset;
+    long long int offset;
     long long int val;
-    int arg[100];
+    long long int arg[100];
     int i;
     
     // 呼び出し元argをpush (headからpush)
@@ -68,7 +89,7 @@ long long int execute_function(Node *node) {
     // 関数でargに代入
     arg_var = node->func->args;
     for (i = i - 1; arg_var; i--) {
-        offset = get_offset(arg_var);
+        offset = (long long int)get_addr(0, arg_var->offset);
         val = arg[i];
         stack_set(offset, val);
         arg_var = arg_var->next;
@@ -77,13 +98,12 @@ long long int execute_function(Node *node) {
     // 関数のstmtを実行
     exec_node = node->func->stmt;
     execute_function_stmt();
+    
     // 戻り値取得
-    if (exec_node->kind == ND_RETURN) {
-        if (exec_node->lhs)
-            execute_cal(exec_node->lhs);
-        else
-            stack_push(0);
-    }
+    if (exec_node && exec_node->kind == ND_RETURN && exec_node->lhs)
+        execute_cal(exec_node->lhs);
+    else
+        stack_push(0);
     val = stack_pop();
 
     // rbp, rspを戻す
@@ -129,13 +149,11 @@ void execute_function_stmt() {
 void execute_while() {
     execute_cal(exec_node->lhs);
     long long int a = stack_pop();
-    printf("while %lld\n", a);
     if (!a)
         exec_node = exec_node->jump_to;
 }
 
 void execute_for() {
-    printf("for loop %d\n", control_infos->loop);
     if (control_infos->loop == 0) {
         if (exec_node->lhs) execute_cal(exec_node->lhs);
     } else {
@@ -230,6 +248,7 @@ void execute_switch() {
 
 void execute_stmt() {
     ControlInfo *control_info;
+
     switch (exec_node->kind) {
         case ND_RETURN:
             return;
@@ -289,7 +308,6 @@ void execute_stmt() {
         case ND_CONTROL_END:
             return;
     }
-    
     execute_cal(exec_node);
     stack_pop();
 }
@@ -297,138 +315,131 @@ void execute_stmt() {
 void execute_cal(Node *node) {
     long long int a;
     long long int b;
-    long long int *pa;
-    long long int *addr;
-    int offset;
+    long long int c;
+    long long int *p;
+    long long int offset;
     
     switch (node->kind) {
         case ND_ASSIGN:
-            offset = get_offset(node->lhs->var);
+            get_offset(node->lhs);
+            offset = stack_pop();
             execute_cal(node->rhs);
-            a = stack_pop();
-            stack_set(offset, a);
-            stack_push(a);
-            return;
+            c = stack_pop();
+            break;
         case ND_ADD:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a + b);
-            return;
+            c = a + b;
+            break;
         case ND_SUB:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a - b);
-            return;
+            c = a - b;
+            break;
         case ND_MUL:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a * b);
-            return;
+            c = a * b;
+            //printf("mul %lld * %lld\n", a,b);
+            break;
         case ND_DIV:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a / b);
-            return;
+            c = a / b;
+            break;
         case ND_MOD:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a % b);
-            return;
-
+            c = a % b;
+            break;
         case ND_LOGICAL_ADD:
             execute_cal(node->lhs);
             b = stack_pop();
             if (b) {
-                stack_push(1);
+                c = 1;
             } else {
                 execute_cal(node->rhs);
-                a = stack_pop();
-                stack_push(a);
+                c = stack_pop();
             }
-            return;
+            break;
         case ND_LOGICAL_AND:
             execute_cal(node->lhs);
             b = stack_pop();
             if (!b) {
-                stack_push(0);
+                c = 0;
             } else {
                 execute_cal(node->rhs);
-                a = stack_pop();
-                stack_push(a);
+                c = stack_pop();
             }
-            return;
+            break;
         
         case ND_EQ:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a == b);
-            return;
+            c = a == b;
+            break;
         case ND_NE:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a != b);
-            return;
+            c = a != b;
+            break;
         case ND_LT:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a < b);
-            return;
+            c = a < b;
+            break;
         case ND_LE:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            stack_push(a <= b);
-            return;
+            c = a <= b;
+            break;
         case ND_NOT:
             execute_cal(node->lhs);
             a = stack_pop();
-            stack_push(!a);
-            return;
+            c = !a;
+            break;
         case ND_LVAR:
-            a = get_primary_value(node);
-            stack_push(a);
-            return;
+            c = (long long int)get_addr(node->var->glb_var, node->var->offset);
+            if (!node->access)
+                c = stack_get(c);
+            // printf("var %lld\n", c);
+            break;
         case ND_NUM:
-            stack_push(node->val);
-            return;
+            c = node->val;
+            break;
         case ND_CHAR:
-            stack_push(node->val);
-            return;
+            c = node->val;
+            break;
         case ND_CALL_FUNC:
             execute_call_func(node);
-            return;
+            c = stack_pop();
+            break;
         case ND_VAR_ADD:
-            a = get_primary_value(node->lhs);
-            offset = get_offset(node->lhs->var);
-            a++;
-            //printf("a++ %d\n", a);
-            stack_set(offset, a);
-            stack_push(a);
-            return;
+            offset = (long long int)get_addr(node->lhs->var->glb_var, node->lhs->var->offset);
+            c = stack_get(offset);
+            break;
         case ND_VAR_SUB:
-            a = get_primary_value(node->lhs);
-            offset = get_offset(node->lhs->var);
-            a--;
-            stack_set(offset, a);
-            stack_push(a);
-            return;
+            offset = (long long int)get_addr(node->lhs->var->glb_var, node->lhs->var->offset);
+            c = stack_get(offset);
+            break;
         case ND_PRINTF:
             execute_printf(node);
             stack_push(0);
@@ -436,33 +447,86 @@ void execute_cal(Node *node) {
         case ND_SCANF:
             execute_scanf(node);
             stack_push(0);
-        case ND_STR:
+            return;
+        case ND_MALLOC:
+            c = (long long int)execute_malloc(node);
+            break;
+        case ND_CALLOC:
+            c = (long long int)execute_calloc(node);
+            break;
+        case ND_FREE:
+            execute_free(node);
+            stack_push(0);
+        case ND_STR_PTR:
             stack_push( (long long int)node->str );
             return;
         case ND_CHAR:
             stack_push(node->val);
             return;
         case ND_ADDR:
-            // node->kindによって引数を変える
-            offset = get_offset(node->lhs->var);
-            addr = get_addr(offset);
-            stack_push( (long long int)addr );
+            get_offset(node->lhs);
+            offset = stack_pop();
+            stack_push( offset );
             return;
         case ND_DEREF:
             execute_cal(node->lhs);
-            pa = (long long int *)stack_pop();
-            stack_push(*pa);
-            return;
+            p = stack_pop();
+            if (node->access) c = (long long int)p;
+            else c = *p;
+            printf("access %d p = %lld c = %lld\n", node->access, p, *p);
+            break;
+        case ND_INDEX:
+            execute_cal(node->lhs);
+            c = stack_pop();
+            if (!node->access)
+                c = stack_get( c );
+            //printf("index %d %lld %lld\n", node->access, c);
+            break;
+        case ND_NULL:
+            c = 0;
+            break;
+        default:
+            printf("unexpected node kind in execute %d\n", node->kind);
+            exit(1);
     }
+    
+    switch (node->kind) {
+        case ND_ASSIGN:
+            stack_set(offset, c);
+            break;
+        case ND_VAR_ADD:
+            c++;
+            stack_set(offset, c);
+            c--;
+            break;
+        case ND_VAR_SUB:
+            c--;
+            stack_set(offset, c);
+            c++;
+            break;
+    }
+    
+    switch (node->type->ty) {
+        case VOID:
+            c = 0;
+        case CHAR:
+            c = (char) c;
+            break;
+        case INT:
+            c = (int) c;
+            break;
+        case LONG_LONG_INT:
+        case PTR:
+        case ARRAY:
+            c = (long long int) c;
+            break;
+        default:
+            printf("unexpected type in execute %d\n", node->type->ty);
+            exit(1);
+    }
+    
+    stack_push(c);
 }
-
-long long int get_primary_value(Node *node) {
-    int offset;
-    offset = get_offset(node->var);
-    return stack_get(offset);
-}
-
-
 
 // -------------- execute printf scanf -------------- //
 
@@ -590,4 +654,63 @@ void execute_scanf(Node *node) {
         if (argc_ == 6) 
             scanf(arg1, arg2, arg3, arg4, arg5, arg6);
     }
+}
+
+// -------------- malloc -------------- //
+long long int *execute_malloc(Node *node) {
+    Node *arg;
+    int argc_ = node->argc;
+    long long int arg1;
+
+    if (argc_ != 1) {
+        printf("malloc arguments must be 1 arguments.\n");
+        exit(1);
+    }
+
+    arg = node->args->next_stmt;
+    execute_cal(arg);
+    arg1 = stack_pop();
+
+    return heap_alloc(arg1);
+}
+
+// -------------- calloc -------------- //
+long long int *execute_calloc(Node *node) {
+    Node *arg;
+    int argc_ = node->argc;
+    long long int arg1;
+
+    if (argc_ != 2) {
+        printf("malloc arguments must be 2 arguments.\n");
+        exit(1);
+    }
+
+    arg = node->args->next_stmt;
+    execute_cal(arg);
+    arg1 = stack_pop();
+    arg = arg->next_stmt;
+
+    arg = node->args->next_stmt;
+    execute_cal(arg);
+    arg2 = stack_pop();
+    
+    return heap_alloc(arg1 * arg2);
+}
+
+// -------------- free -------------- //
+void execute_free(Node *node) {
+    Node *arg;
+    int argc_ = node->argc;
+    long long int arg1;
+
+    if (argc_ != 1) {
+        printf("free argument must be 1 argument\n");
+        exit(1);
+    }
+
+    arg = node->args->next_stmt;
+    execute_cal(arg);
+    arg1 = stack_pop();
+
+    dealloc(arg1);
 }

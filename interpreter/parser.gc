@@ -13,6 +13,8 @@ Func *now_func;
 Var *locals = NULL;
 Var *globals = NULL;
 
+Enum *enums = NULL;
+
 int control = 0;
 int str_num = 0;
 
@@ -29,7 +31,7 @@ Node *new_binary(NodeKind kind, Node *lhs, Node *rhs) {
     return node;
 }
 
-Node *new_num(int val) {
+Node *new_num(long long int val) {
     Node *node = new_node(ND_NUM);
     node->val = val;
     return node;
@@ -64,11 +66,101 @@ Func *find_func(char *name, int len) {
         if (func->type->len == len && !memcmp(func->type->name, name, len))
             return func;
     }
-
+    
     if (now_func->type->len == len && !memcmp(now_func->type->name, name, len))
         return now_func;
+    
+    return NULL;
+}
+
+// enumのメンバ変数を返す
+Node *find_enum_membar(Token *tok) {
+    Enum *enum_p;
+    EnumMem *membar;
+    for (enum_p = enums; enum_p; enum_p = enum_p->next) {
+        for (membar = enum_p->membar; membar; membar = membar->next) {
+            if (tok->len == membar->len &&
+                !memcmp(tok->str, membar->name, membar->len))
+                return membar->num_node;
+        }
+    }
 
     return NULL;
+}
+
+// enumを処理
+Enum *new_enum() {
+    Enum *enum_p;
+    Token *tok;
+    EnumMem *membar;
+    EnumMem *last_membar;
+    int val; // メンバの数字
+    int sign;
+
+    // タグ名があるか
+    tok = consume_kind(TK_IDENT);
+    if (tok && (enum_p = find_enum_membar(tok)))
+        // 既に定義されたタグ名ならそれを返す
+        return enum_p;
+    
+    // 新しいenumの生成
+    enum_p = calloc(1, sizeof(Enum));
+    if (tok) {
+        enum_p->name = tok->str;
+        enum_p->len = tok->len;
+    }
+
+    // enumのメンバ変数ブロック開始
+    // または typedef enum name nameの形ならreturn
+    if (!consume("{"))
+        return enum_p;
+
+    // enumのカッコ内の値をenumに追加
+    last_membar = NULL;
+    val = 0;
+    while (tok = consume_kind(TK_IDENT)) {
+        membar = calloc(1, sizeof(EnumMem));
+        membar->name = tok->str;
+        membar->len = tok->len;
+        if (consume("=")) {
+            if (consume("-"))
+                sign = -1;
+            else
+                sign = 1;
+
+            if (tok = consume_kind(TK_NUM))
+                val = tok->val * sign;
+            else {
+                printf("only number after enum member\n");
+                exit(1);
+            }
+        }
+        membar->num_node = calloc(1, sizeof(Node));
+        membar->num_node->kind = ND_NUM;
+        membar->num_node->val = val;
+        membar->next = last_membar;
+        last_membar = membar;
+        expect(",");
+        val++;
+    }
+    enum_p->membar = last_membar;
+
+    // structのメンバ変数ブロック終了
+    expect("}");
+
+    // enum登録
+    enum_p->next = enums;
+    enums = enum_p;
+    
+    /*
+    // typedefで同じタグ名のものがあれたVarTypeを入れ替える
+    for (Typedef *typedef_ = typedefs; typedef_; typedef_ = typedef_->next)
+        if (typedef_->type->ty == INT && 
+            typedef_->type->enum_p->len == enum_p->len &&
+            !strncmp(typedef_->type->enum_p->name, enum_p->name, enum_p->len))
+            typedef_->type->enum_p = enum_p;
+    */
+    return enum_p;
 }
 
 // ヒープ領域にコピーしてそれを指す
@@ -127,10 +219,10 @@ VarType *new_var_type(int type) {
             typedef_type = 1;
         else if (ty = get_var_type()) {
             if (var_type->ty) {
-                printf("型は一意に定めなければいけません");
+                printf("型は一意に定めなければいけません,\n");
                 exit(1);
             } else if (type != 2 && ty == VOID) {
-                printf("void型は変数の型として指定できません");
+                printf("void型は変数の型として指定できません\n");
                 exit(1);
             }
             var_type->ty = ty;
@@ -138,7 +230,7 @@ VarType *new_var_type(int type) {
         /*
         else if (temp_type = get_typedefed_type()) {
             if (var_type->ty) {
-                printf("型は一意に定めなければいけません");
+                printf("型は一意に定めなければいけません,,\n");
                 exit(1);
             }
             if (temp_type->ty == STRUCT)
@@ -147,20 +239,21 @@ VarType *new_var_type(int type) {
                 var_type->enum_p = temp_type->enum_p;
             var_type->ty = temp_type->ty;
         }*/
-         else if (consume_kind(TK_STRUCT)) {
+        else if (consume_kind(TK_STRUCT)) {
             if (var_type->ty) {
-                printf("型は一意に定めなければいけません");
+                printf("型は一意に定めなければいけません,,,\n");
                 exit(1);
             }
             var_type->ty = STRUCT;
             //var_type->struct_p = new_struct();
-        } else if (consume_kind(TK_ENUM)) {
+        } 
+        else if (consume_kind(TK_ENUM)) {
             if (var_type->ty) {
-                printf("型は一意に定めなければいけません"); 
+                printf("型は一意に定めなければいけません,,,,\n"); 
                 exit(1);
             }
             var_type->ty = INT;
-            //var_type->enum_p = new_enum();
+            var_type->enum_p = new_enum();
         } else
             break;
     }
@@ -183,29 +276,35 @@ VarType *new_var_type(int type) {
         var_type = top_var_type;
     }
 
-    return top_var_type;
+    return var_type;
 }
 
 // RBPからのオフセットを設定
 void set_offset(Var **var, int type) {
-    int offset = get_size((*var)->type);
+    int offset = get_stack_size((*var)->type);
 
-    if (type == 2)
-        (*var)->offset = offset;
-    else if (locals)
-        (*var)->offset = locals->offset + offset;
-    else
-        (*var)->offset = offset - 1;
+    if (type == 2) {
+        if (globals)
+            (*var)->offset = globals->offset + offset;
+        else
+            (*var)->offset = offset - 1;
+    } else {
+        if (locals)
+            (*var)->offset = locals->offset + offset;
+        else
+            (*var)->offset = offset - 1;
+    }
 }
 
 // 変数の宣言 失敗なら途中でexitされる
 // type: 0->arg 1->locals 2->globals
 Var *declare_var(int type) {
-    Token *tok_var_name;
+    Token *tok;
     VarType *array_top;
     VarType *array_bfr;
     VarType *array_now;
     Var *var = calloc(1, sizeof(Var));
+    Node *node;
 
     // 変数の型
     var->type = new_var_type(type);
@@ -213,26 +312,24 @@ Var *declare_var(int type) {
         return NULL;
     
     // 変数名
-    tok_var_name = consume_kind(TK_IDENT);
-    if (!tok_var_name) {
-        /*
+    tok = consume_kind(TK_IDENT);
+    if (!tok) {
         if (var->type->ty == STRUCT || var->type->enum_p) {
             // structかつvar_nameがない -> structの定義だけ
             expect(";");
             return NULL;
         }
-        */
         printf("there is no val name\n");
         exit(1);
     }
 
-    if (find_var(type, tok_var_name)) {
+    if (find_var(type, tok)) {
         printf("declared val name\n");
         exit(1);
     }
 
-    var->name = tok_var_name->str;
-    var->len = tok_var_name->len;
+    var->name = tok->str;
+    var->len = tok->len;
 
     // 関数ならreturn グローバル変数なら var->glb_var = 1
     if (type == 2) {
@@ -257,7 +354,20 @@ Var *declare_var(int type) {
                     printf("配列のサイズは正の整数である必要があります\n");
                     exit(1);
                 }
-            } else if (array_bfr != array_top) {
+            } 
+            else if (tok = consume_kind(TK_IDENT)) {
+                if (node = find_enum_membar(tok)) {
+                    array_now->array_size = node->val;
+                    if (array_now->array_size <= 0) {
+                        printf("array size must be plus.\n");
+                        exit(1);
+                    }
+                } else {
+                    printf("unexpect : there is identification after [");
+                    exit(1);
+                }
+            }
+            else if (array_bfr != array_top) {
                 printf("配列の要素数省略は最高次元の場合のみ可です\n");
                 exit(1);
             }
@@ -289,7 +399,7 @@ void parser() {
             f->before = funcs;
             funcs = f;
         } else if (tok == token) {
-            printf("can't procedure\n");
+            printf("can't procedure\n%s\n", token->str);
             exit(1);
         }
     }
@@ -299,6 +409,7 @@ Func *global() {
     Func *func;
     Var *var;
     VarType *temp;
+    
     if (!(var = declare_var(2)))
         // typedef, struct, enum の場合
         return NULL;
@@ -347,6 +458,19 @@ Func *global() {
         func->locals = locals;
         return func;
     }
+    // グローバル変数
+    else {
+        // voidかたはNG
+        if (var->type->ty == VOID) {
+            printf("void type is not able to declare\n");
+            exit(1);
+        }
+
+        // 連結リスト構築
+        var->next = globals;
+        globals = var;
+        return NULL;
+    }
 }
 
 Node *func_stmt() {
@@ -389,7 +513,7 @@ Node *stmt(Node *cur_node) {
     Node *end_node;
     Var *var;
     Control *c;
-    
+
     if (consume("{")) {
         c = calloc(1, sizeof(Control));
         c->node = new_node(ND_BLOCK);
@@ -403,7 +527,7 @@ Node *stmt(Node *cur_node) {
         if (!controls) {
             return NULL;
         }
-
+        
         c = controls;
         controls = c->before;
         
@@ -549,6 +673,10 @@ Node *stmt(Node *cur_node) {
     else if (consume_kind(TK_RETURN)) {
         node = new_node(ND_RETURN);
         node->lhs = expr();
+        if (!returnable(now_func->type->type, AST_type(1, node->lhs))) {
+            printf("can't return expected type %d, return type %d\n", now_func->type->type->ty, AST_type(1, node->lhs)->ty);
+            exit(1);
+        }
 
         if (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
@@ -617,12 +745,13 @@ Node *stmt(Node *cur_node) {
 
 Node *expr() {
     Node *node = assign();
+    AST_type(1, node);
     return node;
 }
 
 Node *assign() {
     Node *node = Ladd();
-
+    
     if (consume("=")) 
         node = new_binary(ND_ASSIGN, node, assign());
     else if (consume("+="))
@@ -728,14 +857,13 @@ Node *unary() {
     else if (consume("!"))
         return new_binary(ND_NOT, unary(), NULL);
     else if (consume("*")) 
-        return new_binary(ND_DEREF, primary(), NULL);
+        return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&")) {
         node = primary();
         if (node->kind == ND_LVAR || 
-            node->kind == ND_VAR_ADD || 
-            node->kind == ND_VAR_SUB)
-            return new_binary(ND_ADDR, primary(), NULL);
-        else {
+            node->kind == ND_INDEX) {
+            return new_binary(ND_ADDR, node, NULL);
+        } else {
             printf("only var after &\n");
             exit(1);
         }
@@ -765,13 +893,20 @@ Node *primary() {
                 node = new_node(ND_PRINTF);
             else if (tok->len == 5 && !memcmp(tok->str, "scanf", tok->len))
                 node = new_node(ND_SCANF);
+            else if (tok->len == 6 && !memcmp(tok->str, "calloc", tok->len))
+                node = new_node(ND_CALLOC);
+            else if (tok->len == 6 && !memcmp(tok->str, "malloc", tok->len))
+                node = new_node(ND_MALLOC);
+            else if (tok->len == 4 && !memcmp(tok->str, "free", tok->len))
+                node = new_node(ND_FREE);
             else {
                 node = new_node(ND_CALL_FUNC);
                 node->func = find_func(tok->str, tok->len);
                 if (!node->func) {
-                    printf("該当する関数はありませんでした\n");
+                    printf("there is not function that name is %s.\n", str_copy(tok));
                     exit(1);
                 }
+                node->type = node->func->type->type;
             }
             
             args_head = args = calloc(1, sizeof(Node));
@@ -782,7 +917,6 @@ Node *primary() {
                         printf("関数の呼び出し元の引数が処理できません\n");
                         exit(1);
                     }
-
                     args->next_stmt = arg;
                     args = arg;
                     argc++;
@@ -796,23 +930,29 @@ Node *primary() {
             node->argc = argc;
         }
         else {
+            if (node = find_enum_membar(tok))
+                return node;
+
             node = new_node(ND_LVAR);
             if (!(node->var = find_var(3, tok))) {
                 printf("there i   s no var name\n");
                 exit(1);
             }
-
-            node = addadd_minusminus(node);
         }
+        
+        node = attach(node);
+        node = addadd_minusminus(node);
     }
     else if (tok = consume_kind(TK_NUM))
         node = new_num(tok->val);
     else if (tok = consume_kind(TK_STR)) {
-        node = new_node(ND_STR);
+        node = new_node(ND_STR_PTR);
         node->str = str_copy(tok);
     } else if (tok = consume_kind(TK_ONE_CHAR)) {
         node = new_node(ND_CHAR);
         node->val = to_ascii(tok->str);
+    } else if (tok = consume_kind(TK_NULL)) {
+        node = new_node(ND_NULL);
     }
 
     return node;
@@ -833,15 +973,18 @@ Node *attach(Node *node) {
     VarType *type = AST_type(0, node);
     
     // (assign), ->membar, .membar, [assign] の繰り返し
-	while (true) {
+	while (1) {
         if (consume("[")) {
-            if (type->ty != PTR && type->ty != ARRAY)
-                error_at(token->str, "ポインタか配列に添え字を付けてください");
+            if (type->ty != PTR && type->ty != ARRAY) {
+                printf("index attach ptr or array\n");
+                exit(1);
+            }
+            
+            type = type->ptr_to;
+            node->access = 1;
             node = new_binary(ND_INDEX, new_binary(ND_ADD, node, assign()), NULL);
             expect("]");
-            type = type->ptr_to;
         }
-
 
         /*
         else if (consume(".")) {
@@ -876,7 +1019,7 @@ Node *attach(Node *node) {
         }
         */
 
-        
+
         else
             break;
         // 1つ前のlhsはデータが欲しいわけではない

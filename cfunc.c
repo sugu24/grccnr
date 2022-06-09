@@ -43,8 +43,11 @@ VarType *cfunc_type(Node *node) {
         p->ptr_to->ty = CHAR;
     }
 
-    else if (strcmp("memcmp", node->func_name) == 0)
-        p->ty = INT;
+    else if (strcmp("memcmp", node->func_name) == 0) {
+        p->ty = PTR;
+        p->ptr_to = calloc(1, sizeof(VarType));
+        p->ptr_to->ty = VOID;
+    }
     
     else if (strcmp("strlen", node->func_name) == 0)
         p->ty = INT;
@@ -52,8 +55,11 @@ VarType *cfunc_type(Node *node) {
     else if (strcmp("isdigit", node->func_name) == 0)
         p->ty = INT;
     
-     else if (strcmp("strtol", node->func_name) == 0)
+    else if (strcmp("strtol", node->func_name) == 0)
         p->ty = INT;
+
+    else if (strcmp("strtoll", node->func_name) == 0)
+        p->ty = LONG_LONG_INT;
 
     // fopenはlink.cのstring.hを使う
     else if (strcmp("fopen", node->func_name) == 0) {

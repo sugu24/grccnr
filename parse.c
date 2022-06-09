@@ -34,7 +34,7 @@ Node *new_binary(NodeKind kind, Node *lhs, Node *rhs) {
 	return node;
 }
 
-Node *new_num(int val) {
+Node *new_num(long long int val) {
 	Node *node = new_node(ND_NUM);
 	node->val = val;
 	return node;
@@ -413,7 +413,6 @@ Node *create_default_node() {
 // // stmtがreturnの場合にBNFに沿ってNodeを生成して、Nodeを返す
 Node *create_return_node() {
     Node *node = new_node(ND_RETURN);
-    node->lhs = NULL;
     if (!token_str(";")) node->lhs = expr();
     expect(";");
     return node;
@@ -453,7 +452,7 @@ Node *create_asm_node() {
 // structのtypeを生成する
 Struct *new_struct() {
     Struct *struct_p;
-    LVar *membar, *last_membar;
+    LVar *membar, *top_membar, *cur_membar;
     Token *tok;
 
     // タグ名があるか
@@ -475,13 +474,13 @@ Struct *new_struct() {
 
     // declare_varの引数が0なのは
     // 初期化、typedef、structなしだから
-    last_membar = NULL;
+    top_membar = cur_membar = calloc(1, sizeof(LVar));
     while (membar = declare_var(0)) {
-        membar->next = last_membar;
-        last_membar = membar;
+        cur_membar->next = membar;
+        cur_membar = membar;
         expect(";");
     }
-    struct_p->membar = last_membar;
+    struct_p->membar = top_membar->next;
 
     // structのメンバ変数ブロック終了
     expect("}");
@@ -508,6 +507,7 @@ Enum *new_enum() {
     Token *tok;
     EnumMem *membar, *last_membar;
     int val; // メンバの数字
+    int minus;
 
     // タグ名があるか
     tok = consume_kind(TK_IDENT);
@@ -535,8 +535,13 @@ Enum *new_enum() {
         membar->name = tok->str;
         membar->len = tok->len;
         if (consume("=")) {
+            if (consume("-"))
+                minus = -1;
+            else
+                minus = 1;
+
             if (tok = consume_kind(TK_NUM))
-                val = tok->val;
+                val = tok->val * minus;
             else
                 error_at(token->str, "数字である必要があります");
         }
@@ -679,7 +684,8 @@ VarType *new_var_type(int type) {
 // 変数の宣言 失敗なら途中でexitされる
 // type: 0->arg 1->locals 2->global
 LVar *declare_var(int type) {
-    Token *tok_var_name;
+    Token *tok;
+    Node *node;
     VarType *array_top, *array_bfr, *array_now;
     LVar *lvar = calloc(1, sizeof(LVar));
 
@@ -689,8 +695,8 @@ LVar *declare_var(int type) {
         return NULL;
 
     // 変数名
-    tok_var_name = consume_kind(TK_IDENT);
-    if (!tok_var_name) {
+    tok = consume_kind(TK_IDENT);
+    if (!tok) {
         if (lvar->type->ty == STRUCT || lvar->type->enum_p) {
             // structかつvar_nameがない
             // structの定義だけだった
@@ -700,11 +706,11 @@ LVar *declare_var(int type) {
         error_at(token->str, "宣言する変数名がありません");
     }
 
-    if (find_lvar(type, tok_var_name))
-        error_at(tok_var_name->str, "既に宣言された変数名です");
+    if (find_lvar(type, tok))
+        error_at(tok->str, "既に宣言された変数名です");
 
-    lvar->name = str_copy(tok_var_name);
-    lvar->len = tok_var_name->len;
+    lvar->name = str_copy(tok);
+    lvar->len = tok->len;
 
     // 関数ならreturn グローバル変数ならlvar->glb_var=1
     if (type == 2) {
@@ -725,7 +731,18 @@ LVar *declare_var(int type) {
                 array_now->array_size = expect_number();
                 if (array_now->array_size <= 0)
                     error_at(token->str, "配列のサイズは正の整数である必要があります");
-            } else if (array_bfr != array_top)
+            } 
+            else if (tok = consume_kind(TK_IDENT)) {
+                if (node = find_enum_membar(tok)) {
+                    array_now->array_size = node->val;
+                    if (array_now->array_size <= 0) {
+                        printf("array size must be plus.\n");
+                        exit(1);
+                    }
+                } else
+                    error_at(token->str, "unexpect : there is identification after [");
+            }
+            else if (array_bfr != array_top)
                 error_at(token->str, "配列の要素数省略は最高次元の場合のみ可です");
             array_bfr = array_now;
             expect("]");
@@ -1067,6 +1084,7 @@ Node *sizeof_val() {
     Node *node = unary();
     if (node->kind == ND_STR_PTR)
         node->kind = ND_STR;
+    
     return new_num(get_size(AST_type(1, node)));
 }
 
@@ -1140,11 +1158,10 @@ Node *primary() {
             if (!node->lvar->glb_var)
                 node->offset = node->lvar->offset;
             
-            node = attach(node);
-
-            // ++ -- の処理
-            node = add_add_minus_minus(node);
         }
+        node = attach(node);
+        // ++ -- の処理
+        node = add_add_minus_minus(node);
         return node;
     }
     
@@ -1190,6 +1207,7 @@ Node *attach(Node *node) {
     LVar *lvar;
     Token *tok;
     VarType *type = AST_type(0, node);
+
     // (assign), ->membar, .membar, [assign] の繰り返し
 	while (true) {
         if (consume("[")) {
@@ -1225,7 +1243,9 @@ Node *attach(Node *node) {
             mem_node = new_node(ND_MEMBAR);
             mem_node->lvar = lvar;
             node = new_binary(ND_DEREF, node, NULL);
-            node->access = 1;
+            // CALL_FUNCならアドレスが返されるからDEREFしないようにする
+            if (node->lhs->kind == ND_CALL_FUNC) node->access = 2;
+            else node->access = 1;
             node = new_binary(ND_MEMBAR_ACCESS, new_binary(ND_ADD, node, mem_node), NULL);
             type = lvar->type;
             if (type->ty == PTR && type->ptr_to->ty == STRUCT)

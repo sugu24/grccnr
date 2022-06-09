@@ -4,12 +4,11 @@
 int arg_check(Func *func, Node *node) {
     int argc = 0;
     while (node->arg[argc]) argc++;
-    
     LVar *arg = func->arg;
 
     while (1) {
         // argの比較
-        if (!node->arg[argc-1] && !arg) return 1;
+        if (!(argc && node->arg[argc-1]) && !arg) return 1;
         else if (!(node->arg[argc-1] && arg)) return 0;
 
         // same_type(AST_type(呼び出し元, 関数引数定義))
@@ -24,15 +23,12 @@ int arg_check(Func *func, Node *node) {
 
 int same_type(VarType *v1, VarType *v2) {
     while (1) {
-        // printf("v1 %d v2 %d\n", v1->ty, v2->ty);
         if ((v1->ty == ARRAY && v2->ty == PTR) || (v1->ty == PTR && v2->ty == ARRAY)) {}
-        else if ((v1->ty == CHAR && v2->ty == INT) ||
-                 (v1->ty == CHAR && v2->ty == LONG_LONG_INT) ||
-                 (v1->ty == INT && v2->ty == LONG_LONG_INT)) {}
+        else if (v1->ty <= 4 && v2->ty <= 4) {}
         else if (v1->ty == VOID) {}
         else if (v1->ty != v2->ty) return 0;
         else if (v1->ty == STRUCT && get_size(v1) != get_size(v2)) return 0;
-
+        
         if (v1->ptr_to && v2->ptr_to) {
             v1 = v1->ptr_to;
             v2 = v2->ptr_to;
@@ -124,6 +120,26 @@ int get_size(VarType *type) {
     return res;
 }
 
+int get_cal_size(VarType *type) {
+    switch (type->ty) {
+        case CHAR:
+            return CHAR_SIZE;
+        case INT:
+            return INT_SIZE;
+        case LONG_LONG_INT:
+            return LONG_LONG_INT_SIZE;
+        case VOID:
+            return VOID_SIZE;
+        case PTR:
+        case ARRAY:
+            return PTR_SIZE;
+        case STRUCT:
+            return get_cal_size(type->struct_p->membar->type);
+        default:
+            error_at(token->str, "unexpected type");
+    }
+}
+
 // VarTypeが配列抜きで何の型を格納しているか返す
 VarType *get_type(VarType *type) {
     while (type->ty == ARRAY) type = type->ptr_to;
@@ -180,7 +196,7 @@ VarType *AST_type(int ch, Node *node) {
                 rhs_var_type->ty == PTR    ||
                 rhs_var_type->ty == STRUCT)
                 error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
-            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+            if (get_cal_size(lhs_var_type) >= get_cal_size(rhs_var_type))
                 var_type = lhs_var_type;
             else
                 var_type = rhs_var_type;
@@ -196,7 +212,7 @@ VarType *AST_type(int ch, Node *node) {
                 rhs_var_type->ty == PTR    ||
                 rhs_var_type->ty == STRUCT)
                 error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
-            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+            if (get_cal_size(lhs_var_type) >= get_cal_size(rhs_var_type))
                 var_type = lhs_var_type;
             else
                 var_type = rhs_var_type;
@@ -212,7 +228,7 @@ VarType *AST_type(int ch, Node *node) {
                 rhs_var_type->ty == PTR    ||
                 rhs_var_type->ty == STRUCT)
                 error_at(token->str, "積の左の項がポインタか配列か構造体で演算できません");
-            if (get_size(lhs_var_type) >= get_size(rhs_var_type))
+            if (get_cal_size(lhs_var_type) >= get_cal_size(rhs_var_type))
                 var_type = lhs_var_type;
             else
                 var_type = rhs_var_type;
@@ -231,7 +247,7 @@ VarType *AST_type(int ch, Node *node) {
             break;
         case ND_NUM:
             var_type = calloc(1, sizeof(VarType));
-            var_type->ty = INT;
+            var_type->ty = LONG_LONG_INT;
             break;
         case ND_CHAR:
             var_type = calloc(1, sizeof(VarType));
@@ -316,10 +332,17 @@ VarType *AST_type(int ch, Node *node) {
                 error_at(token->str, "void 値が無視されていません");
             //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
             lsize = get_size(lhs_var_type);
-            rsize = get_size(get_type(rhs_var_type));
-            if (rsize > 8 && lsize < rsize)
-                error_at(token->str, "右辺より左辺の方がサイズが小さいです");
-            var_type = lhs_var_type;
+            if (node->rhs->kind != ND_STR) rsize = get_cal_size(rhs_var_type);
+            else rsize = get_size(rhs_var_type);
+            //printf("%d %d\n", lsize, rsize);
+            if ((node->rhs->kind == ND_STR && lsize <= rsize) || (node->rhs->kind != ND_STR && (rsize > 8 || lsize > 8)))
+                error_at(token->str, "assign size is unexpected");
+            
+            if (lsize > rsize) {
+                var_type = rhs_var_type;
+                node->control = 1;
+            } else
+                var_type = lhs_var_type;
             break;
         case ND_LVAR_ADD:
             var_type = AST_type(ch, node->lhs);
@@ -381,7 +404,7 @@ VarType *AST_type(int ch, Node *node) {
             return node->cast;
         else
             return var_type;
-
+            
     // 演算の場合
     // それぞれ指している値の意味が異なる場合
     // ptrs--してからsizeを取得 例) int*なら+4
@@ -407,14 +430,14 @@ VarType *AST_type(int ch, Node *node) {
         return lhs_var_type;
     }
 
-    if ((lt == PTR || lt == ARRAY) && (rt == CHAR || rt == INT))  {
+    if ((lt == PTR || lt == ARRAY) && (rt == CHAR || rt == INT || rt == LONG_LONG_INT))  {
         if (ch) node->rhs = new_binary(ND_MUL, node->rhs, new_num(get_size(lhs_var_type->ptr_to)));
         if (node->cast)
             return node->cast;
         return lhs_var_type;
     }
     
-    if ((lt == CHAR || lt == INT) && (rt == PTR && rt == ARRAY)) {
+    if ((lt == CHAR || lt == INT || lt == LONG_LONG_INT) && (rt == PTR && rt == ARRAY)) {
         if (ch) node->lhs = new_binary(ND_MUL, node->lhs, new_num(get_size(rhs_var_type->ptr_to)));
         if (node->cast)
             return node->cast;

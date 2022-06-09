@@ -134,7 +134,10 @@ Token *tokenizer(char *p) {
         
         // コメントスキップ
         if (strncmp(p, "//", 2) == 0) {
-            return new_token(TK_NULL, cur, p, 0);
+            p += 2;
+            while (*p != '\n')
+                p++;
+            continue;
         }
         
         if (startswith(p, "||") || startswith(p, "&&")  || 
@@ -157,7 +160,7 @@ Token *tokenizer(char *p) {
         if (isdigit(*p)) {
 			cur = new_token(TK_NUM, cur, p, 0);
 			q = p;
-			cur->val = strtol(p, &p, 10);
+			cur->val = strtoll(p, &p, 10);
 			cur->len = p - q;
 			continue;
 		}
@@ -245,7 +248,8 @@ Token *tokenizer(char *p) {
             continue;
         }
         
-        printf("invalid token");
+        printf("invalid token\n");
+        printf("%lld\n", p);
         exit(1);
     }
     cur = new_token(TK_EOF, cur, p, len);
