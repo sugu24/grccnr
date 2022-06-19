@@ -1,0 +1,10 @@
+int main() {
+	int a;
+	int b;
+	int *c;
+	a = 97;
+	b = 98;
+	c = &b;
+	printf("*c = %d(98) %lld\n", *c, c);
+	printf("*(c+1) = %d(97)\n", *(c+1));
+}

@@ -118,7 +118,7 @@ Token *tokenizer(char *p) {
     int len;
     int isstr;
     char *q;
-
+    
     // tokenの先頭を現在へ
     cur = &head;
 
@@ -252,6 +252,7 @@ Token *tokenizer(char *p) {
         printf("%lld\n", p);
         exit(1);
     }
+    
     cur = new_token(TK_EOF, cur, p, len);
 	return head.next;
 }

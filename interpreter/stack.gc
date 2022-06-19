@@ -1,13 +1,14 @@
 #include "cinter.gh"
 
 enum MemoryInfo {
-    GLB  = 3000000,
-    LCL  = 2000000,
-    HEAP = 1000000,
+    GLB  = 2999999,
+    LCL  = 1999999,
+    HEAP = 999999,
 };
 
 long long int stack[GLB];
 long long int stack_address = &stack;
+int stack_size = GLB;
 
 int RSP = LCL;
 int RBP = LCL;
@@ -56,7 +57,6 @@ long long int stack_get(long long int offset) {
 
 void stack_set(long long int offset, long long int val) {
     offset = (offset - stack_address) / 8;
-    
     if (offset < 0) {
         printf("memoryのindexがstack_sizeを超えています3\n");
         exit(1);
@@ -112,9 +112,10 @@ enum {
 };
 
 void init_memory() {
-    stack[HEAP] = HEAP - 1;
+    stack[HEAP] = HEAP + 1;
     stack[HEAP + NEXT_BLOCK] = TAIL_BLOCK;
     heap_head = HEAP;
+    heap_tail = HEAP;
 }
 
 int best_fit(int size) {
@@ -135,7 +136,6 @@ int best_fit(int size) {
         before_offset = current_offset;
         current_offset = stack[current_offset + NEXT_BLOCK];
     }
-    heap_tail = before_offset;
 
     return before_best_offset;
 }
@@ -145,8 +145,10 @@ long long int *heap_alloc(int size) {
     int found_offset;
 
     before_offset = best_fit(size);
+
     if (before_offset == NOT_FOUND) {
-        // failed
+        printf("heap area is fulled\n");
+        exit(1);
     } else {
         if (before_offset == NONE_BEFORE) {
             // beforeがなかった場合
@@ -159,7 +161,9 @@ long long int *heap_alloc(int size) {
             stack[before_offset + NEXT_BLOCK] = do_alloc(found_offset, size);
         }
     }
-
+    
+    if (before_offset == heap_tail)
+        heap_tail = stack[before_offset + NEXT_BLOCK];
     // stack[found_offset]には確保したsizeが入っている
     return &stack[found_offset-1];
 }
@@ -168,7 +172,7 @@ int do_alloc(int found_offset, int size) {
     int next_offset;
 
     if (stack[found_offset] > size+1+2) {
-        next_offset = found_offset + size + 1;
+        next_offset = found_offset - (size + 1);
         stack[next_offset + NEXT_BLOCK] = stack[found_offset + NEXT_BLOCK];
         stack[next_offset] = stack[found_offset] - (size + 1);
         stack[found_offset] = size + 1;
@@ -176,14 +180,18 @@ int do_alloc(int found_offset, int size) {
         next_offset = stack[found_offset + NEXT_BLOCK];
         // stack[found_offset]にすでにsizeが格納されている
     }
+
+    if (found_offset == heap_tail)
+        heap_tail = next_offset;
+        
     return next_offset;
 }
 
 void dealloc(long long int free_address) {
     int free_offset;
-
+    
     free_offset = (free_address - stack_address) / 8;
     stack[heap_tail + NEXT_BLOCK] = free_offset + 1;
     heap_tail = free_offset + 1;
-    stack[free_offset + NEXT_BLOCK] = TAIL_BLOCK;
+    stack[free_offset] = TAIL_BLOCK;
 }

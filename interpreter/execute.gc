@@ -28,12 +28,21 @@ void get_offset(Node *node) {
             break;
         case ND_INDEX:
             execute_cal(node->lhs);
-            p = stack_pop();
-            // printf("offset %lld %lld\n", b, a);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            p = a + b * 8;
+            // printf("offset %lld %lld", b, a);
+            break;
+        case ND_MEMBAR_ACCESS:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            p = a + b;
             break;
         default:
-            printf("can't get offset\n");
-            exit(1);
+            error_at(exec_node->tok_str, "error in interpreter");
     }
     stack_push(p);
 }
@@ -51,10 +60,8 @@ void execute_main() {
         exec_node = func->stmt;
         if (func->locals) stack_malloc(func->locals->offset);
         execute_function_stmt();
-    } else {
-        printf("there is not main function\n");
-        exit(1);
-    }
+    } else
+        error_at(exec_node->tok_str, "there is not main function");
 }
 
 void execute_call_func(Node *node) {
@@ -178,10 +185,8 @@ void execute_for() {
 void execute_if() {
     if (exec_node->lhs)
         execute_cal(exec_node->lhs);
-    else {
-        printf("if節の条件式がありません\n");
-        exit(1);
-    }
+    else 
+        error_at(exec_node->tok_str, "if節の条件式がありません");
 
     if (!exec_node->next_if_else)
         delete_control_infos();
@@ -197,10 +202,8 @@ void execute_else_if() {
         stack_push(0);
     else if (exec_node->lhs)
         execute_cal(exec_node->lhs);
-    else {
-        printf("else if節の条件式がありません\n");
-        exit(1);
-    }
+    else
+        error_at(exec_node->tok_str, "else if節の条件式がありません");
 
     if (!exec_node->next_if_else)
         delete_control_infos();
@@ -259,14 +262,13 @@ void execute_stmt() {
             control_infos = control_info;
             return;
         case ND_WHILE:
-            printf("while %p\n", exec_node);
+            printf("while %p", exec_node);
             execute_while();
             return;
         case ND_FOR:
-            if (control_infos->node->kind != ND_FOR) {
-                printf("forのControlInfoではありません\n");
-                exit(1);
-            }
+            if (control_infos->node->kind != ND_FOR)
+                error_at(exec_node->tok_str, "forのControlInfoではありません");
+
             execute_for();
             return;
         case ND_IF:
@@ -277,17 +279,15 @@ void execute_stmt() {
             execute_if();
             return;
         case ND_ELSE_IF:
-            if (control_infos->node->kind != ND_IF) {
-                printf("else ifのControlInfoではありません\n");
-                exit(1);
-            }
+            if (control_infos->node->kind != ND_IF)
+                error_at(exec_node->tok_str, "else ifのControlInfoではありません");
+
             execute_else_if();
             return;
         case ND_ELSE:
-            if (control_infos->node->kind != ND_IF) {
-                printf("elseのControlInfoではありません\n");
-                exit(1);
-            }
+            if (control_infos->node->kind != ND_IF)
+                error_at(exec_node->tok_str, "elseのControlInfoではありません");
+                
             execute_else();
             return;
         case ND_SWITCH:
@@ -346,7 +346,7 @@ void execute_cal(Node *node) {
             b = stack_pop();
             a = stack_pop();
             c = a * b;
-            //printf("mul %lld * %lld\n", a,b);
+            //printf("mul %lld * %lld", a,b);
             break;
         case ND_DIV:
             execute_cal(node->lhs);
@@ -382,7 +382,6 @@ void execute_cal(Node *node) {
                 c = stack_pop();
             }
             break;
-        
         case ND_EQ:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
@@ -420,7 +419,6 @@ void execute_cal(Node *node) {
             c = (long long int)get_addr(node->var->glb_var, node->var->offset);
             if (!node->access)
                 c = stack_get(c);
-            // printf("var %lld\n", c);
             break;
         case ND_NUM:
             c = node->val;
@@ -471,23 +469,40 @@ void execute_cal(Node *node) {
         case ND_DEREF:
             execute_cal(node->lhs);
             p = stack_pop();
+            
             if (node->access) c = (long long int)p;
+            else if (p < stack_address || stack_address + stack_size * 8 < p)
+                error_at(exec_node->tok_str, "segmentation fault.");
+                
             else c = *p;
-            printf("access %d p = %lld c = %lld\n", node->access, p, *p);
             break;
         case ND_INDEX:
             execute_cal(node->lhs);
-            c = stack_pop();
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a + b * 8;
             if (!node->access)
                 c = stack_get( c );
-            //printf("index %d %lld %lld\n", node->access, c);
+            break;
+        case ND_MEMBAR:
+            c = (long long int)node->var->offset;
+            stack_push( c * 8 );
+            return;
+        case ND_MEMBAR_ACCESS:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a + b;
+            if (!node->access)
+                c = stack_get(c);
             break;
         case ND_NULL:
             c = 0;
             break;
         default:
-            printf("unexpected node kind in execute %d\n", node->kind);
-            exit(1);
+            error_at(exec_node->tok_str, "error in interpreter");
     }
     
     switch (node->kind) {
@@ -509,6 +524,7 @@ void execute_cal(Node *node) {
     switch (node->type->ty) {
         case VOID:
             c = 0;
+            break;
         case CHAR:
             c = (char) c;
             break;
@@ -518,13 +534,12 @@ void execute_cal(Node *node) {
         case LONG_LONG_INT:
         case PTR:
         case ARRAY:
+        case STRUCT:
             c = (long long int) c;
             break;
         default:
-            printf("unexpected type in execute %d\n", node->type->ty);
-            exit(1);
+            error_at(exec_node->tok_str, "error in interpreter");
     }
-    
     stack_push(c);
 }
 
@@ -540,13 +555,10 @@ void execute_printf(Node *node) {
     long long int arg4;
     long long int arg5;
     long long int arg6;
-    if (argc_ > 6) {
-        printf("printfの引数は6個以下");
-        exit(1);
-    } else if (argc_ == 0) {
-        printf("printfの引数が0個です");
-        exit(1);
-    }
+    if (argc_ > 6)
+        error_at(exec_node->tok_str, "printfの引数は6個以下");
+    else if (argc_ == 0)
+        error_at(exec_node->tok_str, "printfの引数が0個です");
 
     arg = node->args->next_stmt;
     if (argc_ > 0) {
@@ -603,13 +615,10 @@ void execute_scanf(Node *node) {
     long long int arg4;
     long long int arg5;
     long long int arg6;
-    if (argc_ > 6) {
-        printf("scanfの引数は6個以下");
-        exit(1);
-    } else if (argc_ <= 1) {
-        printf("scanffの引数が足りません");
-        exit(1);
-    }
+    if (argc_ > 6)
+        error_at(exec_node->tok_str, "scanfの引数は6個以下");
+    else if (argc_ <= 1)
+        error_at(exec_node->tok_str, "scanffの引数が足りません");
 
     arg = node->args->next_stmt;
     if (argc_ > 0) {
@@ -662,10 +671,8 @@ long long int *execute_malloc(Node *node) {
     int argc_ = node->argc;
     long long int arg1;
 
-    if (argc_ != 1) {
-        printf("malloc arguments must be 1 arguments.\n");
-        exit(1);
-    }
+    if (argc_ != 1)
+        error_at(exec_node->tok_str, "malloc arguments must be 1 arguments.");
 
     arg = node->args->next_stmt;
     execute_cal(arg);
@@ -679,11 +686,10 @@ long long int *execute_calloc(Node *node) {
     Node *arg;
     int argc_ = node->argc;
     long long int arg1;
+    long long int arg2;
 
-    if (argc_ != 2) {
-        printf("malloc arguments must be 2 arguments.\n");
-        exit(1);
-    }
+    if (argc_ != 2)
+        error_at(exec_node->tok_str, "malloc arguments must be 2 arguments.");
 
     arg = node->args->next_stmt;
     execute_cal(arg);
@@ -703,10 +709,8 @@ void execute_free(Node *node) {
     int argc_ = node->argc;
     long long int arg1;
 
-    if (argc_ != 1) {
-        printf("free argument must be 1 argument\n");
-        exit(1);
-    }
+    if (argc_ != 1)
+        error_at(exec_node->tok_str, "free argument must be 1 argument");
 
     arg = node->args->next_stmt;
     execute_cal(arg);

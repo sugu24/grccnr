@@ -1,0 +1,28 @@
+typedef struct strct strct;
+
+struct strct {
+	int a;
+	int b[2];
+	int *c;
+};
+
+int main() {
+	strct a;
+	int i;
+	int cc;
+	cc = 44;
+	a.a = 1;
+	a.b[0] = 2;
+	a.b[1] = 3;
+	a.c = &cc;
+	printf("a.a = %d(1)\n", a.a);
+	for (i = 0; i < 2; i++) printf("a.b[%d] = %d(%d)\n", i, a.b[i], i+2);
+	printf("*(a.c) = %d(%d)\n", *(a.c), cc);
+	struct strct *b;
+	b = &a;
+	b->b[0] += 1;
+	b->b[1] += 1;
+	printf("b->a = %d(1)\n", b->a);
+	for (i = 0; i < 2; i++) printf("b->b[%d] = %d(%d)\n", i, b->b[i], i+3);
+	printf("*(b->c) = %d(%d)\n", *(b->c), cc);
+}

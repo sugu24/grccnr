@@ -1,0 +1,16 @@
+int main() {
+	int *a;
+	int b;
+	b = 77;
+	a = NULL;
+	if (a) 
+		printf("a is not null\n");
+	else
+		printf("a is null\n");
+	
+	a = &b;
+	if (a) 
+		printf("a is not null *a = %d(77)\n", *a);
+	else
+		printf("a is null\n");
+}

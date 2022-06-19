@@ -1,0 +1,18 @@
+int a;
+int list[3];
+int fib(int a) {
+	if (a < 2) return 1;
+	return fib(a-1) + fib(a-2);
+}
+
+int main() {
+	int b;
+	a = 5;
+	b = 6;
+	list[0] = 1;
+	list[1] = 2;
+	list[2] = 3;
+	printf("a = %d(5), b = %d(6)\n", a, b);
+	printf("fib(%d) = %d\n", a, fib(a));
+	for (a = 0; a < 3; a++) printf("list[%d] = %d(%d)\n", a, list[a], a+1);
+}

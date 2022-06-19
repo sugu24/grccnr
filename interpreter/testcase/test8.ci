@@ -1,0 +1,12 @@
+int main() {
+	int *a;
+	int *b;
+	a = malloc(sizeof(int));
+	*a = 1;
+	printf("*a = %d(1)\n", *a);
+	b = malloc(sizeof(int));
+	*b = 2;
+	printf("*b = %d(2)\n", *b);
+	free(a);
+	free(b);
+}

@@ -1,6 +1,34 @@
 #include "cinter.gh"
 
 char *user_input;
+char *file_name;
+
+void error_at(char *str, char *error) {
+    int newlines;
+    char *p;
+    char *start;
+    char *end;
+    
+    newlines = 1;
+    for (p = user_input; p < str; p++)
+        if (*p == '\n')
+            newlines++;
+            start = p;
+
+    for (start = str; *start != '\n' && start > user_input; start--) {}
+    while (isspace(*start)) start++;
+
+    for (end = str; end && *end != '\n'; end++) {}
+    
+    // file name and new line 
+    if (file_name) printf("File %s, ", file_name);
+    printf("Line %d\n    ", newlines);
+    
+    printf("%.*s\n", (int)(end - start), start);
+    
+    printf("\nError : %s\n", error);
+    exit(1);
+}
 
 char *file_input(char *file_name) {
     int *fp = fopen(file_name, "r");
@@ -35,15 +63,27 @@ int main(int argc, char **argv) {
         printf("there arg few arg\n");
         exit(1);
     }
-    user_input = file_input(argv[1]);
+    if (1) {
+        file_name = argv[1];
+        user_input = file_input(file_name);
+    } else {
+        file_name = NULL;
+        user_input = argv[1];
+    }
 
+    printf("tokenizer start\n");
     token = tokenizer(user_input);
     printf("tokenizer end\n");
 
     parser();
     printf("parser end\n");
-
+    
+    init_memory();
     execute_main();
     printf("execute end\n");
-    print_stack(10);
+    print_local_stack(10);
+    printf("\n\n");
+    print_global_stack(10);
+    printf("\n\n");
+    print_heap_stack(10);
 }

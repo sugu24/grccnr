@@ -1,7 +1,12 @@
 int main() {
-	int a;
+	long long int a;
 	int b;
-	scanf("%d %d", &a, &b);
-	a = a + b;
-	printf("a = %d\n", a*b);
+	char c;
+	a = 1000000000000;
+	b = a;
+	c = b;
+	printf("%lld %d %c\n", a, b, c);
+	a = 1;
+	b = 2;
+	c = 3;
 }

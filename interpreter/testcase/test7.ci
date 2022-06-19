@@ -1,0 +1,24 @@
+typedef enum ASCII ascii;
+typedef int* p_int;
+
+enum ASCII{
+	A = 97,
+	B,
+	C,
+};
+
+int main() {
+	ascii ai;
+	ai = A;
+	int a;
+	int b;
+	int c;
+	p_int p;
+	a = A;
+	b = B;
+	c = C;
+	p = &a;
+	printf("ascii ai = %d(97)\n", ai);
+	printf("*p_int = %d(97)\n", *p);
+	printf("a = %d(97), b = %d(98), c = %d(99)\n", a, b, c);
+}

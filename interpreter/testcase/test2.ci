@@ -1,0 +1,22 @@
+
+int main() {
+	int a[3][2];
+	int b;
+	b[0][1] = 200;
+	a[2][1] = 3;
+	a[1][1] = 5;
+	int i;
+	int j;
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 2; j++) {
+			printf("a[%d][%d] = %d\n", i, j, a[i][j]);
+		}
+	}
+	
+	printf("\n");
+	for (i = 0; i < 3; i++) {
+		for (j = 0; j < 2; j++) {
+			printf("*(*a+%d)+%d) = %d\n", i, j, *(*(a+i)+j));
+		}
+	}
+}

@@ -23,8 +23,8 @@ int get_stack_size(VarType *type) {
             res = type->array_size * get_stack_size(type->ptr_to);
             break;
         case STRUCT:
-            //for (var = type->struct_p->membar; var; var = var->next)
-            //    res += get_size(var->type);
+            for (var = type->struct_p->membar; var; var = var->next)
+                res += get_stack_size(var->type);
             break;
         default:
             printf("型が処理できません type = %d\n", type->ty);
@@ -39,6 +39,7 @@ int get_stack_size(VarType *type) {
 long long int get_size(VarType *type) {
     int res = 0;
     Var *var;
+    
     switch (type->ty) {
         case INT: 
             res = 4;
@@ -59,8 +60,8 @@ long long int get_size(VarType *type) {
             res = type->array_size * get_size(type->ptr_to);
             break;
         case STRUCT:
-            //for (var = type->struct_p->membar; var; var = var->next)
-            //    res += get_size(var->type);
+            for (var = type->struct_p->membar; var; var = var->next)
+                res += get_size(var->type);
             break;
         default:
             printf("型が処理できません\n");
@@ -254,6 +255,7 @@ VarType *AST_type(int ch, Node *node) {
             break;
         case ND_INDEX:
             var_type = AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
             if (var_type->ty == STRUCT || var_type->ty == ARRAY || var_type->ty == PTR)
                 var_type = var_type->ptr_to;
             else {
@@ -262,7 +264,11 @@ VarType *AST_type(int ch, Node *node) {
             }
             break;
         case ND_MEMBAR_ACCESS:
-            var_type = AST_type(ch, node->lhs);
+            AST_type(ch, node->lhs);
+            var_type = AST_type(ch, node->rhs);
+            break;
+        case ND_MEMBAR:
+            var_type = node->var->type;
             break;
         case ND_EQ:
         case ND_NE:
@@ -285,15 +291,15 @@ VarType *AST_type(int ch, Node *node) {
                 printf("var is not void\n");
                 exit(1);
             }
-
             lsize = get_size(lhs_var_type);
             rsize = get_size(rhs_var_type);
             if (rsize > 8 && lsize < rsize) {
                 printf("lhs size is less than rhs size\n");
                 exit(1);
-            }
+            } else if (lsize < rsize)
+                node->rhs->type = lhs_var_type;
+            
             var_type = lhs_var_type;
-            node->rhs->type = lhs_var_type;
             break;
         case ND_VAR_ADD:
         case ND_VAR_SUB:
@@ -341,6 +347,17 @@ VarType *AST_type(int ch, Node *node) {
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             break;
+        case ND_CALLOC:
+        case ND_MALLOC:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = PTR;
+            var_type->ptr_to = calloc(1, sizeof(VarType));
+            var_type->ptr_to->ty = VOID;
+            break;
+        case ND_FREE:
+            var_type = calloc(1, sizeof(VarType));
+            var_type->ty = VOID;
+            break;
         default:
             printf("kind is not unexpected\n");
             exit(1);
@@ -350,6 +367,5 @@ VarType *AST_type(int ch, Node *node) {
         var_type = node->cast;
     
     node->type = var_type;
-
     return var_type;
 }
