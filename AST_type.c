@@ -172,10 +172,10 @@ int get_membar_offset(LVar *membar) {
 
 // 戻り値 Type:(int,ptr) ptrs:ptr?
 VarType *AST_type(int ch, Node *node) {
-    // printf("kind %d\n", node->kind);
-    VarType *lhs_var_type, *rhs_var_type;
+    VarType *lhs_var_type = NULL, *rhs_var_type = NULL;
     VarType *var_type; // 整数や比較演算の場合に使う
     int lsize, rsize;
+
     switch (node->kind) {
         case ND_ADD:
             lhs_var_type = AST_type(ch, node->lhs);
@@ -216,7 +216,7 @@ VarType *AST_type(int ch, Node *node) {
                 var_type = lhs_var_type;
             else
                 var_type = rhs_var_type;
-            return lhs_var_type;
+            break;
         case ND_MOD:
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);
@@ -232,7 +232,7 @@ VarType *AST_type(int ch, Node *node) {
                 var_type = lhs_var_type;
             else
                 var_type = rhs_var_type;
-            return lhs_var_type;
+            break;
         case ND_LOGICAL_ADD:
             AST_type(ch, node->lhs);
             AST_type(ch, node->rhs);
@@ -297,26 +297,30 @@ VarType *AST_type(int ch, Node *node) {
             //printf("%d\n", var_type->ty);
             break;
         case ND_EQ:
-            AST_type(ch, node->lhs);
-            AST_type(ch, node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
+
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             break;
         case ND_NE:
-            AST_type(ch, node->lhs);
-            AST_type(ch, node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
+
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             break;
         case ND_LT:
-            AST_type(ch, node->lhs);
-            AST_type(ch, node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
+            
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             break;
         case ND_LE:
-            AST_type(ch, node->lhs);
-            AST_type(ch, node->rhs);
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
+            
             var_type = calloc(1, sizeof(VarType));
             var_type->ty = INT;
             break;
@@ -330,20 +334,19 @@ VarType *AST_type(int ch, Node *node) {
             rhs_var_type = AST_type(ch, node->rhs);
             if (rhs_var_type->ty == VOID)
                 error_at(token->str, "void 値が無視されていません");
-            //printf("#%d %d\n", lhs_var_type->size, rhs_var_type->size);
+                
             lsize = get_size(lhs_var_type);
             if (node->rhs->kind != ND_STR) rsize = get_cal_size(rhs_var_type);
             else rsize = get_size(rhs_var_type);
-            //printf("%d %d\n", lsize, rsize);
+            
             if ((node->rhs->kind == ND_STR && lsize <= rsize) || (node->rhs->kind != ND_STR && (rsize > 8 || lsize > 8)))
                 error_at(token->str, "assign size is unexpected");
             
-            if (lsize > rsize) {
-                var_type = rhs_var_type;
-                node->control = 1;
-            } else
-                var_type = lhs_var_type;
-            break;
+            if (lsize > rsize && lsize == 8)
+                node->rhs->cltq = 1;
+            
+            var_type = lhs_var_type;
+            return var_type;
         case ND_LVAR_ADD:
             var_type = AST_type(ch, node->lhs);
             break;
@@ -351,8 +354,8 @@ VarType *AST_type(int ch, Node *node) {
             var_type = AST_type(ch, node->lhs);
             break;
         case ND_LVAR:
-           var_type = node->lvar->type;
-           break;
+            var_type = node->lvar->type;
+            break;
         case ND_MEMBAR:
             var_type = node->lvar->type;
             break;
@@ -397,6 +400,20 @@ VarType *AST_type(int ch, Node *node) {
         default:
             error_at(token->str, "予期しないNodeKindです");
     }
+
+    // cltqを行うべきか
+    if (lhs_var_type && rhs_var_type && !node->lhs->access) {
+        lsize = get_cal_size(lhs_var_type);
+        rsize = get_cal_size(rhs_var_type);
+        
+        if (lsize < rsize && rsize == 8)
+            node->lhs->cltq = 1;
+        else if (lsize > rsize && lsize == 8)
+            node->rhs->cltq = 1;
+    }
+
+    if (node->cast && get_cal_size(node->cast) == 8 && get_cal_size(var_type) < 8)
+        node->cltq = 1;
 
     // castされているか
     if (node->kind != ND_ADD && node->kind != ND_SUB)

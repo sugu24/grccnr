@@ -1,0 +1,3 @@
+#include "cinter.gh"
+
+Node *initialize(Var *var) {}

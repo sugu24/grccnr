@@ -161,7 +161,7 @@ Token *tokenize() {
 		if (isdigit(*p)) {
 			cur = new_token(TK_NUM, cur, p, 0);
 			char *q = p;
-			cur->val = strtol(p, &p, 10);
+			cur->val = strtoll(p, &p, 10);
 			cur->len = p - q;
 			continue;
 		}
@@ -170,6 +170,7 @@ Token *tokenize() {
         if (strchr("\"", *p)) {
             p++;
             char *q = p;
+            
             while (!strchr("\"", *q)) {
                 if (strchr("\\", *q)) q++;
                 q++;

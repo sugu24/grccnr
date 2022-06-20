@@ -65,7 +65,7 @@ int gen_arg_push(LVar *arg) {
 void mov_rax_data(Node *node) {
     int size = get_size(AST_type(0, node));
     if (size == 1)
-        printf("  movsx rax, BYTE PTR [rax]\n");
+        printf("  movsx eax, BYTE PTR [rax]\n");
     else if (size == 4)
         printf("  mov eax, [rax]\n");
     else 
@@ -270,6 +270,8 @@ void gen_stmt(Node *node) {
         case ND_RETURN:
             if (node->lhs) {
                 gen_stmt(node->lhs);
+                if (node->lhs->control)
+                    printf("  cltq\n");
                 printf("  pop rax\n");
             }
             printf("  mov rsp, rbp\n");
@@ -278,12 +280,10 @@ void gen_stmt(Node *node) {
             return;
         case ND_NUM:
             printf("  movq rax, %lld\n", node->val);
-            printf("  push rax\n");
-            return;
+            break;
         case ND_CHAR:
             printf("  mov rax, %d\n", (int)node->val);
-            printf("  push rax\n");
-            return;
+            break;
         case ND_STR_PTR:
             printf("  lea rax, .STR%d[rip]\n", node->lvar->offset);
             printf("  push rax\n");
@@ -293,25 +293,22 @@ void gen_stmt(Node *node) {
             printf("  pop rdi\n");
             printf("  mov rax, rdi\n");
             mov_rax_data(node->lhs);
-            printf("  push rax\n");
             printf("  add [rdi], QWORD PTR 1\n");
-            return;
+            break;
         case ND_LVAR_SUB:
             gen_stmt(node->lhs);
             printf("  pop rdi\n");
             printf("  mov rax, rdi\n");
             mov_rax_data(node->lhs);
-            printf("  push rax\n");
             printf("  sub [rdi], QWORD PTR 1\n");
-            return;
+            break;
         case ND_NOT:
             gen_stmt(node->lhs);
             printf("  pop rax\n");
             printf("  cmp rax, 0\n");
             printf("  sete al\n");
             printf("  movzb rax, al\n");
-            printf("  push rax\n");
-            return;
+            break;
         case ND_LOGICAL_ADD:
             gen_stmt(node->lhs);
             printf("  pop rax\n");
@@ -320,8 +317,7 @@ void gen_stmt(Node *node) {
             gen_stmt(node->rhs);
             printf("  pop rax\n");
             printf(".ADD_AND%d:\n", node->control);
-            printf("  push rax\n");
-            return;
+            break;
         case ND_LOGICAL_AND:
             gen_stmt(node->lhs);
             printf("  pop rax\n");
@@ -330,8 +326,7 @@ void gen_stmt(Node *node) {
             gen_stmt(node->rhs);
             printf("  pop rax\n");
             printf(".ADD_AND%d:\n", node->control);
-            printf("  push rax\n");
-            return;
+            break;
         case ND_LVAR: // 変数
             if (node->lvar->glb_var) 
                 printf("  lea rax, .%s[rip]\n", node->lvar->name);
@@ -341,12 +336,10 @@ void gen_stmt(Node *node) {
             }
             
             // アクセス中または配列は単体だとアドレス
-            if (!node->access && node->lvar->type->ty != ARRAY) {
+            if (!node->access && node->lvar->type->ty != ARRAY)
                 mov_rax_data(node);
-            }
 
-            printf("  push rax\n");
-            return;
+            break;
         case ND_NULL:
             printf("  push 0\n");
             return;
@@ -359,8 +352,7 @@ void gen_stmt(Node *node) {
             if (node->access == 2) {}
             else if (node->access) printf("  mov rax, [rax]\n");
             else mov_rax_data(node);
-            printf("  push rax\n");
-            return;
+            break;
         case ND_INDEX:
             gen_stmt(node->lhs);
             if (!node->access &&
@@ -368,17 +360,18 @@ void gen_stmt(Node *node) {
                 // ポインタに添え字がついていて添え字がlastか配列の途中出ない場合
                 printf("  pop rax\n");
                 mov_rax_data(node);
-                printf("  push rax\n");
-            }
-            return;
+                break;
+            } else
+                return;
         case ND_MEMBAR_ACCESS:
             gen_stmt(node->lhs);
             if (!node->access) {
                 printf("  pop rax\n");
                 mov_rax_data(node);
-                printf("  push rax\n");
+                break;
             }
-            return;
+            else 
+                return;
         case ND_MEMBAR:
             printf("  push %d\n", node->offset);
             return;
@@ -391,69 +384,115 @@ void gen_stmt(Node *node) {
             printf("  pop rax\n");
             printf("  pop rdi\n");
 
-            if (node->control)
+            if (node->cltq)
                 printf("  cltq\n");
-
+                
             // charなら1バイトのみ書き込まれる
+            // int ポインタなどは4,8バイト
             if (size == 1)
                 printf("  mov [rdi], al\n");
-            // int ポインタなどは4,8バイト
             else if (size == 4)
                 printf("  mov [rdi], eax\n");
             else 
                 printf("  mov [rdi], rax\n");
+                
             printf("  push rax\n");
             return;
     }
 
-	gen_stmt(node->lhs);
-	gen_stmt(node->rhs);
-
-	printf("  pop rdi\n");
-	printf("  pop rax\n");
-
 	switch (node->kind) {
 		case ND_ADD:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  add rax, rdi\n");
 			break;
 		case ND_SUB:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  sub rax, rdi\n");
 			break;
 		case ND_MUL:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  imul rax, rdi\n");
 			break;
 		case ND_DIV:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  cqo\n");
 			printf("  idiv rdi\n");
 			break;
-        case ND_MOD:
+        case ND_MOD:            
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+            
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
             printf("  cqo\n");
             printf("  idiv rdi\n");
             printf("  mov rax, rdx\n");
             break;
 		case ND_EQ:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+            
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  cmp rax, rdi\n");
 			printf("  sete al\n");
 			printf("  movzb rax, al\n");
 			break;
 		case ND_NE:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  cmp rax, rdi\n");
 			printf("  setne al\n");
 			printf("  movzb rax, al\n");
 			break;
 		case ND_LT:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  cmp rax, rdi\n");
 			printf("  setl al\n");
 			printf("  movzb rax, al\n");
 			break;
 		case ND_LE:
+            gen_stmt(node->lhs);
+            gen_stmt(node->rhs);
+
+            printf("  pop rdi\n");
+            printf("  pop rax\n");
 			printf("  cmp rax, rdi\n");
 			printf("  setle al\n");
 			printf("  movzb rax, al\n");
 			break;
 	}
 
-	printf("  push rax\n");
+    if (node->cast && get_size(node->cast) == 1)
+        printf("  movsx rax, al\n");
+
+    if (node->cltq)
+        printf("  cltq\n");
+
+    printf("  push rax\n");
 	return;
 }
 

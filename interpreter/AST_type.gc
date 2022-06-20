@@ -315,6 +315,13 @@ VarType *AST_type(int ch, Node *node) {
             if (var_type->ty == ARRAY)
                 node->access = 1;
             break;
+        case ND_CAST:
+            var_type = AST_type(ch, node->lhs);
+            if (var_type->ty == PTR && node->cast->ty != LONG_LONG_INT)
+                error_at(token->str, "cast from pointer to defferent size");
+            else if (node->cast->ty == VOID)
+                error_at(token->str, "void value not ignored as it ought to be");
+            return node->cast;
         case ND_RETURN:
             if (node->lhs)
                 var_type = AST_type(ch, node->lhs);
@@ -362,9 +369,6 @@ VarType *AST_type(int ch, Node *node) {
             printf("kind is not unexpected\n");
             exit(1);
     }
-
-    if (node->cast)
-        var_type = node->cast;
     
     node->type = var_type;
     return var_type;

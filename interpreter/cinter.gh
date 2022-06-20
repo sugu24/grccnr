@@ -10,6 +10,11 @@ typedef enum TokenKind TokenKind;
 typedef enum NodeKind NodeKind;
 typedef enum TypeSize TypeSize;
 
+typedef struct Typedef Typedef;
+typedef struct Enum Enum;
+typedef struct EnumMem  EnumMem;
+typedef struct Struct Struct;
+
 enum TypeSize {
     INT_SIZE = 4,
     LONG_LONG_INT_SIZE = 8,
@@ -52,7 +57,7 @@ struct Token {
     Token *next;
     char *str;
     int len;
-    int val;
+    long long int val;
 };
 
 enum NodeKind {
@@ -68,7 +73,7 @@ enum NodeKind {
 	ND_NE,     // 9 !=
 	ND_LT,     // 10 <
 	ND_LE,     // 11 <=
-    ND_ASSIGN, // 12= 
+    ND_ASSIGN, // 12 = 
     ND_LVAR,   // 13 ローカル変数
     ND_RETURN, // 14 return
     ND_IF,     // 15 if
@@ -100,6 +105,10 @@ enum NodeKind {
     ND_FOR_START,   // 41
     ND_PRINTF,      // 42
     ND_SCANF,       // 43
+    ND_CALLOC,      // 44
+    ND_MALLOC,      // 45
+    ND_FREE,        // 46
+    ND_CAST,        // 47
 };
 
 struct Node {
@@ -110,19 +119,23 @@ struct Node {
     Node *stmt;    // if,for,whileのstmt
     Node *next_if_else; // else if or elseのノード
     Node *next_stmt;  // block内のstmtを表す
-    int val;       // kindがND_NUMの場合のみ使う
+    long long int val;       // kindがND_NUMの場合のみ使う
     int offset;    // kindがND_LVAR, ND_ELSE_IF,ND_DEREFの場合に使う
     int control;   // kindが制御構文の場合のみ使う(ラベル番号)
+    int access;
     Node *args;     // kindがND_CALL_FUNCの場合のみ使う
     int argc;
     Var *var;       // 変数の場合
     Func *func;     // 関数の場合
     // Struct *struct_p; // STRUCTの場合に使用
-    // Enum *enm_p;      // なんとなく付けた
+    Enum *enum_p;      // なんとなく付けた
     Node *jump_to;
     Node *jumped_from;
     Node **break_to;
     char *str;
+    VarType *cast;
+    VarType *type;
+    char *tok_str;
 };
 
 // 変数の型
@@ -141,8 +154,8 @@ struct VarType {
     Type ty;
     VarType *ptr_to;
     int array_size;
-    //Struct *struct_p;
-    //Enum *enum_p;
+    Struct *struct_p;
+    Enum *enum_p;
 };
 
 struct Var {
@@ -164,12 +177,46 @@ struct Func {
     Node *stmt;
 };
 
+// enumの型
+struct Enum {
+    Enum *next;    // 次のenumメンバ
+    char *name;
+    int len;
+    EnumMem *membar;  // enum内のメンバ
+};
+
+// enumのメンバの型
+struct EnumMem {
+    EnumMem *next;
+    Node *num_node;
+    char *name;
+    int len;
+};
+
+// typedefの型
+struct Typedef {
+    Typedef *next;     // 次のTypedef
+    VarType *type;     // INT, CHARなど
+    char *name; // 宣言する名前
+    int len;           // len(define_name)
+};
+
+// structの型
+struct Struct {
+    Struct *next;  // 次のstruct
+    char *name;    // タグ名
+    int len;       // len(タグ名)
+    Var *membar;  // メンバ変数(ND_NUM)
+}; 
+
 extern char *user_input;
 extern Token *token;
-extern Func now_func;
+extern Func *now_func;
 extern Var *locals;
 extern Var *globals;
 extern Func *funcs;
+extern long long int stack_address;
+extern int stack_size;
 
 // ---------- tokenizer ---------- //
 int consume(char *op);
@@ -183,9 +230,13 @@ Token *tokenizer(char *p);
 
 // ---------- parser ---------- //
 VarType *get_typedefed_type();
+Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
+Node *new_num(long long int val);
 Node *create_block_node();
 Node *create_return_node();
 Func *find_func(char *name, int len);
+VarType *new_var_type(int type);
+Var *declare_var(int type, VarType *type);
 void parser();
 Func *global();
 Node *func_stmt();
@@ -200,18 +251,25 @@ Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
+Node *attach(Node *node);
 Node *addadd_minusminus(Node *node);
 
 // ---------- stack ---------- //
 long long int stack_pop();
 void stack_push(long long int val);
-long long int stack_get(int offset);
-long long int *get_addr(int offset);
-void stack_set(int offset, long long int val);
+long long int stack_get(long long int offset);
+long long int *get_addr(int is_global_var, long long int offset);
+void stack_set(long long int offset, long long int val);
 void stack_malloc(int size);
 void call_func_stack();
 void ret_func_stack();
-void print_stack(int len);
+void print_local_stack(int len);
+void print_global_stack(int len);
+void print_heap_stack(int len);
+void init_memory();
+long long int *heap_alloc(int size);
+int do_alloc(int found_offset, int size);
+void dealloc(long long int free_address);
 
 // ---------- execute ---------- //
 void execute_main();
@@ -224,7 +282,18 @@ void execute_cal(Node *node);
 long long int get_primary_value(Node *node);
 void execute_printf(Node *node);
 void execute_scanf(Node *node);
+long long int *execute_malloc(Node *node);
+long long int *execute_calloc(Node *node);
+void execute_free(Node *node);
 
 // ---------- AST_type ---------- //
-int get_size(VarType *type);
-VarType *AST_type(Node *node);
+long long int get_size(VarType *type);
+int get_stack_size(VarType *type);
+int returnable(VarType *ltype, VarType* rtype);
+VarType *AST_type(int ch, Node *node);
+
+// ---------- cinter ---------- //
+void error_at(char *str, char *error);
+
+// ---------- initializer ---------- //
+Node *initialize(Var *var);

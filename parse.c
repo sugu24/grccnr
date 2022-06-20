@@ -607,7 +607,7 @@ VarType *new_var_type(int type) {
     VarType *var_type, *temp_type, *top_var_type;
     Type ty;
     int typedef_type = 0;
-    top_var_type = var_type = calloc(1, sizeof(VarType));
+    var_type = calloc(1, sizeof(VarType));
     
     // 型取得    
     while (true) {
@@ -628,11 +628,13 @@ VarType *new_var_type(int type) {
         } else if (temp_type = get_typedefed_type()) {
             if (var_type->ty)
                 error_at(token->str, "型は一意に定めなければいけません");
-            if (temp_type->ty == STRUCT)
+            /*if (temp_type->ty == STRUCT)
                 var_type->struct_p = temp_type->struct_p;
             else if (temp_type->enum_p)
-                var_type->enum_p = temp_type->enum_p;
-            var_type->ty = temp_type->ty;
+                var_type->enum_p = temp_type->enum_p;*/
+            temp_type->extern_ = var_type->extern_;
+            free(var_type);
+            var_type = temp_type;
         } else if (consume_kind(TK_STRUCT)) {
             if (var_type->ty)
                 error_at(token->str, "型は一意に定めなければいけません");
@@ -646,6 +648,9 @@ VarType *new_var_type(int type) {
         } else
             break;
     }
+    // printf("end\n");
+
+    top_var_type = var_type;
 
     // type=0 (arg) ならtypedef_typeはないはず
     if (typedef_type && type == 0)

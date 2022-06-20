@@ -145,6 +145,7 @@ Struct *new_struct() {
     Var *membar;
     Var *top_membar;
     Var *cur_membar;
+    VarType *type;
     Token *tok;
     Typedef *typedef_;
     int offset;
@@ -171,12 +172,18 @@ Struct *new_struct() {
     // declare_varの引数が0なのは
     // 初期化、typedef、structなしだから
     top_membar = cur_membar = calloc(1, sizeof(Var));
-    while (membar = declare_var(0)) {
-        offset += get_stack_size(membar->type);
-        membar->offset = offset;
-        cur_membar->next = membar;
-        cur_membar = membar;
-        expect(";");
+    while (type = new_var_type(0)) {
+        while (1) {
+            membar = declare_var(0, type);
+            offset += get_stack_size(membar->type);
+            membar->offset = offset;
+            cur_membar->next = membar;
+            cur_membar = membar;
+            
+            if (consume(",")) continue;
+            else if (consume(";")) break;
+            else error_at(token->str, "there is not ; after declare var");
+        }
     }
     struct_p->membar = top_membar->next;
 
@@ -320,11 +327,9 @@ VarType *new_var_type(int type) {
     Typedef *type_def;
     VarType *var_type;
     VarType *temp_type;
-    VarType *top_var_type;
     Type ty;
     int typedef_type = 0;
-    top_var_type = calloc(1, sizeof(VarType));
-    var_type = top_var_type;
+    var_type = calloc(1, sizeof(VarType));
     
     // 型取得
     while (1) {
@@ -365,16 +370,18 @@ VarType *new_var_type(int type) {
     if (!var_type->ty)
         return NULL;
         
-    // ポインタ取得
-    while (consume("*")) {
-        top_var_type = calloc(1, sizeof(VarType));
-        top_var_type->ty = PTR;
-        top_var_type->ptr_to = var_type;
-        var_type = top_var_type;
-    }
+    
     
     // typedef宣言ならtypdefefsにvarとtypedef名を加える
     if (typedef_type) {
+        // ポインタ取得
+        while (consume("*")) {
+            temp_type = calloc(1, sizeof(VarType));
+            temp_type->ty = PTR;
+            temp_type->ptr_to = var_type;
+            var_type = temp_type;
+        }
+        
         Token *name;
         if (!(name = consume_kind(TK_IDENT)))
             error_at(token->str, "typedef宣言での宣言後の名前を指定してください");
@@ -408,18 +415,25 @@ void set_offset(Var **var, int type) {
 
 // 変数の宣言 失敗なら途中でexitされる
 // type: 0->arg 1->locals 2->globals
-Var *declare_var(int type) {
+Var *declare_var(int type, VarType *var_type) {
     Token *tok;
     VarType *array_top;
     VarType *array_bfr;
     VarType *array_now;
+    VarType *top_var_type;
     Var *var = calloc(1, sizeof(Var));
     Node *node;
 
+    // ポインタ取得
+    while (consume("*")) {
+        top_var_type = calloc(1, sizeof(VarType));
+        top_var_type->ty = PTR;
+        top_var_type->ptr_to = var_type;
+        var_type = top_var_type;
+    }
+
     // 変数の型
-    var->type = new_var_type(type);
-    if (!var->type)
-        return NULL;
+    var->type = var_type;
     
     // 変数名
     tok = consume_kind(TK_IDENT);
@@ -481,10 +495,7 @@ Var *declare_var(int type) {
     // RBPからのオフセット
     set_offset(&var, type);
 
-    if (type == 0 || consume(";"))
-        return var;
-
-    error_at(token->str, " ; is needed");
+    return var;
 }
 
 void parser() {
@@ -505,25 +516,32 @@ Func *global() {
     Func *func;
     Var *var;
     VarType *temp;
-    
-    if (!(var = declare_var(2)))
-        // typedef, struct, enum の場合
-        return NULL;
-    else if (consume("(")) {
-        // 関数の定義か宣言の場合
-        if (var->init)
-            error_at(token->str, "can't initialize function");
+    VarType *var_type;
+    Node *node;
 
+    var_type = new_var_type(2);
+    if (!var_type)
+        return NULL;
+
+    var = declare_var(2, var_type);
+    if (!var)
+        return NULL; // typedef struct enum
+    if (consume("(")) {
+        if (var_type->ty == ARRAY)
+            error_at(token->str, "function type must not array");
+        
         // funcの初期化
         func = calloc(1, sizeof(Func));
         func->type = var;
 
         // localsの初期化とfuncのローカル変数初期化
         locals = NULL;
-        while (1) {
-            if (var = declare_var(0)) {
-                // 配列の場合はポインタに変換(配列はアドレスを貰うため)
-                temp = var;
+        while (!consume(")")) {
+            if (var_type = new_var_type(0)) {
+                var = declare_var(0, var_type);
+                if (!var)
+                    error_at(token->str, "is not var name");
+
                 while (temp->ty == ARRAY) {
                     temp->ty = PTR;
                     temp->array_size = 0;
@@ -532,16 +550,17 @@ Func *global() {
 
                 var->next = locals;
                 locals = var;
+
+                if (consume(","))
+                    continue;
+                else if (consume(")"))
+                    break;
+                else
+                    error_at(token->str, " , or ) after var tail");
             }
-
-            if (consume(","))
-                continue;
-            else if (consume(")"))
-                break;
-            else
-                error_at(token->str, "function args cut off comma and function args are ended ).");
+            else 
+                error_at(token->str, "don't declare argument");
         }
-
         now_func = func;
         func->args = locals;
         controls = NULL;
@@ -549,16 +568,36 @@ Func *global() {
         func->stmt = func_stmt();
         func->locals = locals;
         return func;
-    }
+    } 
     // グローバル変数
     else {
-        // voidかたはNG
-        if (var->type->ty == VOID)
-            error_at(token->str, "void type is not able to declare");
+        while (1) {
+            if (consume("=")) {
+                if (!(node = initialize(var)))
+                    error_at(token->str, "there is not initialization after =");
 
-        // 連結リスト構築
-        var->next = globals;
-        globals = var;
+                while ((node->kind == ND_DEREF && node->lhs->kind == ND_LVAR && node->lhs->var->glb_var) ||
+                        node->kind == ND_NUM || node->kind == ND_STR) {
+                    execute_cal(node);
+                    node = node->next_stmt;
+                    if (!node) break;
+                }
+
+                if (node) 
+                    error_at(token->str, "initializer element is not constant");
+            }
+
+            // voidかたはNG
+            if (var->type->ty == VOID)
+                error_at(token->str, "void type is not able to declare");
+
+            // 連結リスト構築
+            var->next = globals;
+            globals = var;
+            if (consume(";")) break;
+            else if (consume(",")) continue;
+            else error_at(token->str, "there is not ; after var declared");
+        }
         return NULL;
     }
 }
@@ -568,23 +607,32 @@ Node *func_stmt() {
     Node *cur_node;
     Node *node;
     Var *var;
+    VarType *type;
 
     head_node = cur_node = calloc(1, sizeof(Node));
     while (1) {
-        if (var = declare_var(1)) {
-            var->next = locals;
-            locals = var;
-            if (!var->init) continue;
-            node = var->init;
+        if (type = new_var_type(1)) {
+            while (1) {
+                var = declare_var(1, type);
+                if (consume("=")) {
+                    cur_node->next_stmt = initialize(var);
+                    while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
+                }
+                var->next = locals;
+                locals = var;
+
+                if (consume(",")) continue;
+                else if (consume(";")) break;
+                else error_at(token->str, "there is not ; after declare var");
+            }
         } else {
             if (!(node = stmt(cur_node))) {
                 if (!controls) break;
                 else continue;
             }
+            cur_node->next_stmt = node;
+            while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
         }
-        
-        cur_node->next_stmt = node;
-        while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
     }
     return head_node;
 }
@@ -600,6 +648,7 @@ void set_jump_to(Node *l, Node *m, Node *r) {
 
 Node *stmt(Node *cur_node) {
     Node *node = NULL;
+    Node *block_node;
     Node *end_node;
     Var *var;
     Control *c;
@@ -614,26 +663,24 @@ Node *stmt(Node *cur_node) {
     else if (consume("}")) {
         node = new_node(ND_BLOCK_END);
         
-        if (!controls) {
+        if (!controls)
             return NULL;
+        else if (controls->node->kind != ND_BLOCK)
+            error_at(token->str, "対応する } がありません");
+
+        controls = controls->before;
+
+        block_node = node;
+
+        while (controls && controls->node->kind != ND_BLOCK) {
+            end_node = new_node(ND_CONTROL_END);
+            set_jump_to(controls->node, block_node, end_node);
+            controls = controls->before;
+            node->next_stmt = end_node;
+            block_node = end_node;
         }
-        
-        c = controls;
-        controls = c->before;
-        
-        if (c->node->kind == ND_BLOCK) {
-            if (controls && !controls->node->kind != ND_BLOCK) {
-                end_node = new_node(ND_CONTROL_END);
-                node->next_stmt = end_node;
-                set_jump_to(controls->node, node, end_node);
-                controls = controls->before;
-                return node;
-            } else {
-                return node;
-            }
-        } 
-        
-        error_at(token->str, "対応する } がありません");
+
+        return node;        
     }
     else if (consume_kind(TK_WHILE)) {
         c = calloc(1, sizeof(Control));
@@ -757,11 +804,14 @@ Node *stmt(Node *cur_node) {
         if (!returnable(now_func->type->type, AST_type(1, node->lhs)))
             error_at(token->str, "戻り値が一致しません");
 
-        if (controls && controls->node->kind != ND_BLOCK) {
+        block_node = node;
+
+        while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
-            set_jump_to(controls->node, node, end_node);
+            set_jump_to(controls->node, block_node, end_node);
             controls = controls->before;
             node->next_stmt = end_node;
+            block_node = end_node;
         }
     }
     else if (consume_kind(TK_CONTINUE)) {
@@ -776,11 +826,14 @@ Node *stmt(Node *cur_node) {
         if (!node->jump_to)
             error_at(token->str, "continueはloop内で使用してください");
 
-        if (controls && controls->node->kind != ND_BLOCK) {
+        block_node = node;
+
+        while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
-            set_jump_to(controls->node, node, end_node);
+            set_jump_to(controls->node, block_node, end_node);
             controls = controls->before;
             node->next_stmt = end_node;
+            block_node = end_node;
         }
     }
     else if (consume_kind(TK_BREAK)) {
@@ -789,7 +842,7 @@ Node *stmt(Node *cur_node) {
 
         for (; c; c = c->before) {
             if (c->node->kind == ND_FOR || c->node->kind == ND_WHILE || c->node->kind == ND_SWITCH) {
-                node->break_to = &c->node->jump_to;
+                node->break_to = &(c->node->jump_to);
                 break;
             }
         }
@@ -797,21 +850,26 @@ Node *stmt(Node *cur_node) {
         if (!node->break_to)
             error_at(token->str, "breakはloop内で使用してください");
 
-        if (controls && controls->node->kind != ND_BLOCK) {
+        block_node = node;
+
+        while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
-            set_jump_to(controls->node, node, end_node);
+            set_jump_to(controls->node, block_node, end_node);
             controls = controls->before;
             node->next_stmt = end_node;
+            block_node = end_node;
         }
     }
     else {
         node = expr();
-        
-        if (controls && controls->node->kind != ND_BLOCK) {
+        block_node = node;
+
+        while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
-            set_jump_to(controls->node, node, end_node);
+            set_jump_to(controls->node, block_node, end_node);
             controls = controls->before;
             node->next_stmt = end_node;
+            block_node = end_node;
         }
     }
     expect(";");
@@ -977,8 +1035,9 @@ Node *primary() {
     while (consume("(")) {
         if (cast = new_var_type(0)) {
             expect(")");
-            node = primary();
+            node = new_node(ND_CAST);
             node->cast = cast;
+            node->lhs = primary();
             return node;
         } else {
             node = assign();

@@ -143,6 +143,7 @@ void set_next_exec_node() {
 
 void execute_function_stmt() {
     exec_node = exec_node->next_stmt;
+    
     while (exec_node) {
         if (exec_node->kind == ND_RETURN) 
             break;
@@ -251,7 +252,7 @@ void execute_switch() {
 
 void execute_stmt() {
     ControlInfo *control_info;
-
+    
     switch (exec_node->kind) {
         case ND_RETURN:
             return;
@@ -318,6 +319,7 @@ void execute_cal(Node *node) {
     long long int c;
     long long int *p;
     long long int offset;
+    // printf("%d\n", node->kind);
     
     switch (node->kind) {
         case ND_ASSIGN:
@@ -498,6 +500,27 @@ void execute_cal(Node *node) {
             if (!node->access)
                 c = stack_get(c);
             break;
+        case ND_CAST:
+            execute_cal(node->lhs);
+            c = stack_pop();
+            switch (node->cast->ty) {
+                case INT:
+                    c = (int) c;
+                    break;
+                case LONG_LONG_INT:
+                    c = (long long int) c;
+                    break;
+                case CHAR:
+                    c = (char) c;
+                    break;
+                case PTR:
+                    c = (long long int) c;
+                    break;
+                default:
+                    error_at(exec_node->tok_str, "can't cast to it type");
+            }
+            stack_push(c);
+            return;
         case ND_NULL:
             c = 0;
             break;
