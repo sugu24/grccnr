@@ -77,7 +77,7 @@ typedef enum {
 struct Token {
 	TokenKind kind; // トークンの型
 	Token *next;    // 次の入力トークン
-	int val;        // kindがTK_NUMの場合、その数値
+	long long int val;        // kindがTK_NUMの場合、その数値
 	char *str;      // トークン文字列
 	int len;        // トークンの長さ
 };
@@ -147,7 +147,7 @@ struct Node {
     Node *stmt;    // if,for,whileのstmt
     Node *next_if_else; // else if or elseのノード
     Node *next_stmt;  // block内のstmtを表す
-    int val;       // kindがND_NUMの場合のみ使う
+    long long int val;       // kindがND_NUMの場合のみ使う
     int offset;    // kindがND_LVAR, ND_ELSE_IF,ND_DEREFの場合に使う
     int control;   // kindが制御構文の場合のみ使う(ラベル番号)
     char *func_name;  // kindがND_CALL_FUNCの場合のみ使う
@@ -159,6 +159,7 @@ struct Node {
     char *asm_str;
     int len;
     VarType *cast;
+    int cltq;
 };
 
 // 変数の種類
@@ -251,7 +252,7 @@ Token *tokenize();
 // ---------- parser ---------- //
 Node *new_node(NodeKind kind);
 Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
-Node *new_num(int val);
+Node *new_num(long long int val);
 Node *new_char(char *c);
 LVar *find_lvar(int local, Token *tok);
 char *str_copy(Token *tok);
