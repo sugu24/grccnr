@@ -4,11 +4,15 @@ enum MemoryInfo {
     GLB  = 2999999,
     LCL  = 1999999,
     HEAP = 999999,
+    TEXT = 1000000,
 };
 
 long long int stack[GLB];
+char text[TEXT];
 long long int stack_address = &stack;
+long long int text_address = &text;
 int stack_size = GLB;
+int text_size = TEXT;
 
 int RSP = LCL;
 int RBP = LCL;
@@ -31,13 +35,13 @@ void stack_push(long long int val) {
     stack[RSP--] = val;
 }
 
-long long int *get_addr(int is_global_var, long long int offset) {
+long long int *get_stack_addr(int is_global_var, long long int offset) {
     if (is_global_var)
         offset = GLB - offset;
     else
         offset = RBP - offset;
         
-    if (offset < 0) {
+    if (offset < 0 || GLB <= offset) {
         printf("memoryのindexがstack_sizeを超えています1\n");
         exit(1);
     }
@@ -45,32 +49,31 @@ long long int *get_addr(int is_global_var, long long int offset) {
     return &stack[offset];
 }
 
-long long int stack_get(long long int offset) {
-    offset = (offset - stack_address) / 8;
-    
-    if (offset < 0) {
-        printf("memoryのindexがstack_sizeを超えています2\n");
-        exit(1);
-    }
-    return stack[offset];
+long long int stack_text_get(long long int offset) {
+    if (offset >= text_address && text_address + text_size > offset)
+        return text[offset - text_size];
+    else if (offset >= stack_address && stack_address + stack_size * 8 > offset)
+        return stack[(offset - stack_address) / 8];
+    else 
+        error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています2\n");
 }
 
 void stack_set(long long int offset, long long int val) {
-    offset = (offset - stack_address) / 8;
-    if (offset < 0) {
-        printf("memoryのindexがstack_sizeを超えています3\n");
-        exit(1);
-    }
-    stack[offset] = val;
-    // printf("set %lld %lld <- %lld\n", RBP, offset, val);
+    if (offset >= text_address && text_address + text_size > offset)
+        error_at(exec_node->tok_str, "can't write at text area");
+    else if (offset >= stack_address && stack_address + stack_size * 8 > offset)
+        stack[(offset - stack_address) / 8] = val;
+    else 
+        error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています3\n");
 }
 
 void stack_malloc(int size) {
-    if (RSP - size < 0) {
+    RSP -= size + 1;
+
+    if (RSP < 0) {
         printf("RSPがstack_sizeを超えてしまいます\n");
         exit(1);
     }
-    RSP -= size + 1;
 }
 
 void call_func_stack() {

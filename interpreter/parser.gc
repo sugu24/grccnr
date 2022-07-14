@@ -369,9 +369,7 @@ VarType *new_var_type(int type) {
     // 変数宣言なし
     if (!var_type->ty)
         return NULL;
-        
-    
-    
+            
     // typedef宣言ならtypdefefsにvarとtypedef名を加える
     if (typedef_type) {
         // ポインタ取得
@@ -493,7 +491,8 @@ Var *declare_var(int type, VarType *var_type) {
     }
 
     // RBPからのオフセット
-    set_offset(&var, type);
+    if (var->type->ty != ARRAY || var->type->array_size) 
+        set_offset(&var, type);
 
     return var;
 }
@@ -573,14 +572,13 @@ Func *global() {
     else {
         while (1) {
             if (consume("=")) {
-                if (!(node = initialize(var)))
+                if (!(node = initialize(var, 2)))
                     error_at(token->str, "there is not initialization after =");
 
-                while ((node->kind == ND_DEREF && node->lhs->kind == ND_LVAR && node->lhs->var->glb_var) ||
-                        node->kind == ND_NUM || node->kind == ND_STR) {
+                while (node && ((node->rhs->kind == ND_DEREF && node->rhs->lhs->kind == ND_LVAR && node->rhs->lhs->var->glb_var) ||
+                        node->rhs->kind == ND_NUM || node->rhs->kind == ND_STR || node->rhs->kind == ND_CHAR)) {
                     execute_cal(node);
                     node = node->next_stmt;
-                    if (!node) break;
                 }
 
                 if (node) 
@@ -607,15 +605,15 @@ Node *func_stmt() {
     Node *cur_node;
     Node *node;
     Var *var;
-    VarType *type;
+    VarType *var_type;
 
     head_node = cur_node = calloc(1, sizeof(Node));
     while (1) {
-        if (type = new_var_type(1)) {
+        if (var_type = new_var_type(1)) {
             while (1) {
-                var = declare_var(1, type);
+                var = declare_var(1, var_type);
                 if (consume("=")) {
-                    cur_node->next_stmt = initialize(var);
+                    cur_node->next_stmt = initialize(var, 1);
                     while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
                 }
                 var->next = locals;

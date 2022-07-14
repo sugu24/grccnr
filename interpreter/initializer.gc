@@ -1,3 +1,141 @@
 #include "cinter.gh"
 
-Node *initialize(Var *var) {}
+Node *single_initializer(Node *node) {
+    return new_binary(ND_ASSIGN, node, Ladd());
+}
+
+Node *array_initializer(Node *assigned_var_node, int where) {
+    int comma_stack[100];
+    int i;
+    int j;
+    int size;
+    int array_size;
+    Node *assigned_node;
+    Node *assign_node;
+    Node *first_node;
+    Node *cur_node;
+    VarType *type;
+
+    for (i = 0; i < 100; i++) comma_stack[i] = 0;
+    assigned_var_node->access = 1;
+    first_node = cur_node = calloc(1, sizeof(Node));
+    array_size = get_stack_size(assigned_var_node->var->type);
+    if (!(assigned_var_node->var->type->array_size)) array_size = -1;
+
+    i = 0;
+    while (!(i == 1 && consume("}"))) {
+        if (consume("}"))
+            comma_stack[i--] = 0;
+        else if (consume("{"))
+            i++;
+        else if (consume(","))
+            comma_stack[i]++;
+        else {
+            assigned_node = assigned_var_node;
+            type = assigned_var_node->var->type;
+            size = 0;
+            for (j = 1; j <= i; j++) {
+                if (!type->ptr_to)
+                    error_at(token->str, "over dimensions of the array");
+                
+                assigned_node = new_binary(ND_INDEX, 
+                    assigned_node, 
+                    new_binary(ND_MUL, new_num(get_stack_size(type->ptr_to)), new_num(comma_stack[j])));
+                size += get_stack_size(type->ptr_to) * comma_stack[j];
+                assigned_node->access = 1;
+                type = type->ptr_to;
+            }
+            assigned_node->access = 0;
+            
+            // 配列外に初期化している場合
+            if (array_size > 0 && size >= array_size)
+                error_at(token->str, "initialized to memory that exceeds the size of the array");
+            
+            assign_node = new_binary(ND_ASSIGN, assigned_node, Ladd());
+            
+            cur_node->next_stmt = assign_node;
+            cur_node = cur_node->next_stmt;
+        }
+    }
+
+    if (!(assigned_var_node->var->type->array_size)) {
+        assigned_var_node->var->type->array_size = comma_stack[1] + 1;
+        set_offset(&(assigned_var_node->var), where);
+    }
+    
+    return first_node->next_stmt;
+}
+
+Node *type_initializer(Node *node, int where);
+Node *struct_initializer(Node *assigned_node, int where) {
+    Var *struct_member;
+    Node *node;
+    Node *head_node;
+    Node *cur_node;
+    Node *struct_node;
+    Node *member_node;
+
+    head_node = cur_node = calloc(1, sizeof(Node));
+    struct_member = assigned_node->var->type->struct_p->membar;
+    assigned_node->access = 1;
+
+    expect("{");
+    while (1) {
+        member_node = new_node(ND_MEMBAR);
+        member_node->var = struct_member;
+        member_node = new_binary(ND_MEMBAR_ACCESS, assigned_node, member_node);
+        member_node->var = struct_member;
+        node = type_initializer(member_node, where);
+
+        cur_node->next_stmt = node;
+        while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
+        
+        struct_member = struct_member->next;
+        if (struct_member)
+            if (consume(",")) continue;
+            else error_at(token->str, "all member is not initialized");
+        else if (token_str("}")) break;
+        else error_at(token->str, "unexpected");
+    }
+    expect("}");
+
+    return head_node->next_stmt;
+}
+
+Node *type_initializer(Node *node, int where) {
+    switch (node->var->type->ty) {
+        case INT:
+        case LONG_LONG_INT:
+        case CHAR:
+        case PTR:
+            node = single_initializer(node);
+            break;
+        case ARRAY:
+            node = array_initializer(node, where);
+            break; 
+        case STRUCT:
+            node = struct_initializer(node, where);
+            break;
+        default:
+            error_at(token->str, "initialized var type is unexpected");
+    }
+
+    return node;
+}
+
+Node *initialize(Var *var, int where) {
+    Node *node;
+    Node *first_node;
+
+    node = new_node(ND_LVAR);
+    node->var = var;
+
+    first_node = node = type_initializer(node, where);
+
+    while (node) {
+        AST_type(1, node);
+        node = node->next_stmt;
+    }
+
+    return first_node;
+}

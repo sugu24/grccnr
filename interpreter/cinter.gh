@@ -141,13 +141,13 @@ struct Node {
 // 変数の型
 typedef enum { 
     VOID = 1, 
-    INT, 
-    LONG_LONG_INT, 
-    CHAR, 
-    PTR, 
-    ARRAY, 
-    STRUCT, 
-    ENUM,
+    INT,            // 2
+    LONG_LONG_INT,  // 3
+    CHAR,           // 4
+    PTR,            // 5
+    ARRAY,          // 6
+    STRUCT,         // 7
+    ENUM,           // 8
 } Type;
 
 struct VarType {
@@ -216,7 +216,10 @@ extern Var *locals;
 extern Var *globals;
 extern Func *funcs;
 extern long long int stack_address;
+extern long long int text_address;
 extern int stack_size;
+extern int text_size;
+extern Node *exec_node;
 
 // ---------- tokenizer ---------- //
 int consume(char *op);
@@ -231,10 +234,12 @@ Token *tokenizer(char *p);
 // ---------- parser ---------- //
 VarType *get_typedefed_type();
 Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
+Node *new_node(NodeKind kind);
 Node *new_num(long long int val);
 Node *create_block_node();
 Node *create_return_node();
 Func *find_func(char *name, int len);
+void set_offset(Var **var, int where);
 VarType *new_var_type(int type);
 Var *declare_var(int type, VarType *type);
 void parser();
@@ -257,8 +262,8 @@ Node *addadd_minusminus(Node *node);
 // ---------- stack ---------- //
 long long int stack_pop();
 void stack_push(long long int val);
-long long int stack_get(long long int offset);
-long long int *get_addr(int is_global_var, long long int offset);
+long long int stack_text_get(long long int offset);
+long long int *get_stack_addr(int is_global_var, long long int offset);
 void stack_set(long long int offset, long long int val);
 void stack_malloc(int size);
 void call_func_stack();
@@ -296,4 +301,4 @@ VarType *AST_type(int ch, Node *node);
 void error_at(char *str, char *error);
 
 // ---------- initializer ---------- //
-Node *initialize(Var *var);
+Node *initialize(Var *var, int where);

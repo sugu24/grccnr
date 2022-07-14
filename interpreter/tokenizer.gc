@@ -196,7 +196,6 @@ Token *tokenizer(char *p) {
                 exit(1);
             }
             p++;
-            printf("%d %d %s\n", cur->kind, cur->len, cur->str);
             continue;
         }
         
@@ -249,7 +248,7 @@ Token *tokenizer(char *p) {
         }
         
         printf("invalid token\n");
-        printf("%lld\n", p);
+        printf("%.30s\n", p);
         exit(1);
     }
     

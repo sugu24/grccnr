@@ -110,7 +110,7 @@ VarType *AST_type(int ch, Node *node) {
                 var_type = lhs_var_type;
             else
                 var_type = rhs_var_type;
-            
+                
             if (ch) {
                 if ( (lhs_var_type->ty == PTR || lhs_var_type->ty == ARRAY) &&
                      (rhs_var_type->ty == INT || rhs_var_type->ty == CHAR || rhs_var_type->ty == LONG_LONG_INT)) {
@@ -131,7 +131,7 @@ VarType *AST_type(int ch, Node *node) {
                     node->lhs->type->ty = LONG_LONG_INT;
                 }
             }
-
+            
             break;
         case ND_SUB:
             lhs_var_type = AST_type(ch, node->lhs);

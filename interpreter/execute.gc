@@ -1,5 +1,6 @@
 #include "cinter.gh"
 
+Node *exec_node;
 typedef struct ControlInfo ControlInfo;
 
 struct ControlInfo {
@@ -9,7 +10,6 @@ struct ControlInfo {
     int true;
 };
 
-Node *exec_node;
 ControlInfo *control_infos = NULL;
 
 // nodeからRBPからのoffsetを返す
@@ -20,7 +20,7 @@ void get_offset(Node *node) {
 
     switch (node->kind) {
         case ND_LVAR:
-            p = (long long int)get_addr(node->var->glb_var, node->var->offset);
+            p = (long long int)get_stack_addr(node->var->glb_var, node->var->offset);
             break;
         case ND_DEREF:
             execute_cal(node->lhs);
@@ -96,7 +96,7 @@ long long int execute_function(Node *node) {
     // 関数でargに代入
     arg_var = node->func->args;
     for (i = i - 1; arg_var; i--) {
-        offset = (long long int)get_addr(0, arg_var->offset);
+        offset = (long long int)get_stack_addr(0, arg_var->offset);
         val = arg[i];
         stack_set(offset, val);
         arg_var = arg_var->next;
@@ -377,9 +377,9 @@ void execute_cal(Node *node) {
         case ND_LOGICAL_AND:
             execute_cal(node->lhs);
             b = stack_pop();
-            if (!b) {
+            if (!b)
                 c = 0;
-            } else {
+            else {
                 execute_cal(node->rhs);
                 c = stack_pop();
             }
@@ -418,9 +418,9 @@ void execute_cal(Node *node) {
             c = !a;
             break;
         case ND_LVAR:
-            c = (long long int)get_addr(node->var->glb_var, node->var->offset);
+            c = (long long int)get_stack_addr(node->var->glb_var, node->var->offset);
             if (!node->access)
-                c = stack_get(c);
+                c = stack_text_get(c);
             break;
         case ND_NUM:
             c = node->val;
@@ -433,12 +433,12 @@ void execute_cal(Node *node) {
             c = stack_pop();
             break;
         case ND_VAR_ADD:
-            offset = (long long int)get_addr(node->lhs->var->glb_var, node->lhs->var->offset);
-            c = stack_get(offset);
+            offset = (long long int)get_stack_addr(node->lhs->var->glb_var, node->lhs->var->offset);
+            c = stack_text_get(offset);
             break;
         case ND_VAR_SUB:
-            offset = (long long int)get_addr(node->lhs->var->glb_var, node->lhs->var->offset);
-            c = stack_get(offset);
+            offset = (long long int)get_stack_addr(node->lhs->var->glb_var, node->lhs->var->offset);
+            c = stack_text_get(offset);
             break;
         case ND_PRINTF:
             execute_printf(node);
@@ -472,11 +472,13 @@ void execute_cal(Node *node) {
             execute_cal(node->lhs);
             p = stack_pop();
             
-            if (node->access) c = (long long int)p;
-            else if (p < stack_address || stack_address + stack_size * 8 < p)
-                error_at(exec_node->tok_str, "segmentation fault.");
-                
-            else c = *p;
+            if (node->access)
+                c = (long long int)p;
+            else if ((p >= stack_address && stack_address + stack_size * 8 > p) || 
+                     (p >= text_address && text_address + text_size > p))
+                c = *p;
+            else
+                error_at(exec_node->tok_str, "segmentation fault");
             break;
         case ND_INDEX:
             execute_cal(node->lhs);
@@ -485,7 +487,7 @@ void execute_cal(Node *node) {
             a = stack_pop();
             c = a + b * 8;
             if (!node->access)
-                c = stack_get( c );
+                c = stack_text_get( c );
             break;
         case ND_MEMBAR:
             c = (long long int)node->var->offset;
@@ -498,7 +500,7 @@ void execute_cal(Node *node) {
             a = stack_pop();
             c = a + b;
             if (!node->access)
-                c = stack_get(c);
+                c = stack_text_get(c);
             break;
         case ND_CAST:
             execute_cal(node->lhs);
