@@ -395,7 +395,7 @@ void gen_stmt(Node *node) {
                 printf("  mov [rdi], eax\n");
             else 
                 printf("  mov [rdi], rax\n");
-                
+
             printf("  push rax\n");
             return;
     }
@@ -545,7 +545,7 @@ void gen_initialize_global_var(Node *node) {
             return;
         case ND_MOD:
             gen_initialize_global_var(node->lhs);
-            printf(" % ");
+            printf(" %% ");
             gen_initialize_global_var(node->rhs);
             return;
         case ND_NUM:
@@ -566,6 +566,7 @@ void gen_initialize_global_var(Node *node) {
 void gen_initialize_data(LVar *glb_var) {
     if (!glb_var->initial) {
         printf("  .zero %d\n", get_size(glb_var->type));
+        return;
     }
 
     // 配列などのオフセット
@@ -620,7 +621,7 @@ void gen_global_var() {
 
     for (glb_var = global_var; glb_var; glb_var = glb_var->next) {
         if (glb_var->type->extern_) 
-            printf(".extern .%s:\n", glb_var->name);
+            printf(".extern %s:\n", glb_var->name);
         else {
             printf(".globl .%s\n", glb_var->name);
             printf(".%s:\n", glb_var->name);
