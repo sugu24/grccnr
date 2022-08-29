@@ -1,21 +1,21 @@
 #include "cinter.gh"
 
 enum MemoryInfo {
-    GLB  = 2999999,
-    LCL  = 1999999,
-    HEAP = 999999,
+    GLB  = 3000000,
+    LCL  = 2000000,
+    HEAP = 1000000,
     TEXT = 1000000,
 };
 
 long long int stack[GLB];
-char text[TEXT];
+char Text[TEXT];
 long long int stack_address = &stack;
-long long int text_address = &text;
+long long int text_address = &Text;
 int stack_size = GLB;
 int text_size = TEXT;
 
-int RSP = LCL;
-int RBP = LCL;
+int RSP = LCL - 1;
+int RBP = LCL - 1;
 
 long long int stack_pop() {
     long long int ret;
@@ -24,6 +24,7 @@ long long int stack_pop() {
         exit(1);
     }
     RSP++;
+    // printf("pop RSP = %d -> %lld %.10s\n", RSP, stack[RSP], exec_node->tok_str);
     return stack[RSP];
 }
 
@@ -32,44 +33,59 @@ void stack_push(long long int val) {
         printf("RSPPがstack_sizeを超えます\n");
         exit(1);
     }
+    // printf("push RSP = %d <- %lld %.10s\n", RSP, val, exec_node->tok_str);
     stack[RSP--] = val;
 }
 
 long long int *get_stack_addr(int is_global_var, long long int offset) {
     if (is_global_var)
-        offset = GLB - offset;
+        offset = GLB - offset - 1;
     else
         offset = RBP - offset;
         
-    if (offset < 0 || GLB <= offset) {
-        printf("memoryのindexがstack_sizeを超えています1\n");
-        exit(1);
-    }
-    // printf("addr %lld %lld\n", offset, &stack[offset]);
+    if (offset < 0 || GLB < offset)
+        error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています1\n");
+    
     return &stack[offset];
 }
 
-long long int stack_text_get(long long int offset) {
+long long int stack_text_get(long long int offset, Type type) {
     if (offset >= text_address && text_address + text_size > offset)
-        return text[offset - text_size];
-    else if (offset >= stack_address && stack_address + stack_size * 8 > offset)
-        return stack[(offset - stack_address) / 8];
+        return Text[offset - text_size];
+    else if (offset >= stack_address && stack_address + stack_size * 8 >= offset)
+        if (type == CHAR) {
+            int bit_offset = 8 * ((offset - stack_address) % 8);
+            long long int massking = (long long int) 255 << bit_offset;
+            //printf("get %d %d %d\n", (offset-stack_address)/8, bit_offset, massking);
+            return (stack[(offset - stack_address) / 8] & massking) >> bit_offset;
+        } else
+            return stack[(offset - stack_address) / 8];
     else 
         error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています2\n");
+    // print_local_stack(5);
 }
 
-void stack_set(long long int offset, long long int val) {
+void stack_set(long long int offset, long long int val, Type type) {
     if (offset >= text_address && text_address + text_size > offset)
-        error_at(exec_node->tok_str, "can't write at text area");
-    else if (offset >= stack_address && stack_address + stack_size * 8 > offset)
-        stack[(offset - stack_address) / 8] = val;
-    else 
+        error_at(exec_node->tok_str, "Character literals cannot be changed");
+    else if (offset >= stack_address && stack_address + stack_size * 8 >= offset) {      
+        if (type == CHAR) {
+            int bit_offset = 8 * ((offset - stack_address) % 8);
+            long long int massking = ~((long long int) 255 << bit_offset);
+            long long int filter = (long long int) val << bit_offset;
+            //printf("set %d %d %d %d %d\n", (offset-stack_address)/8, val, (offset-stack_address)%8, bit_offset, massking);
+            stack[(offset - stack_address) / 8] = (stack[(offset - stack_address) / 8] & massking) | filter;
+            // printf("%lld %lld\n", filter, stack[(offset-stack_address)/8]);
+        } else
+            stack[(offset - stack_address) / 8] = val;
+    } else
         error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています3\n");
+    // print_local_stack(5);
 }
 
 void stack_malloc(int size) {
     RSP -= size + 1;
-
+    
     if (RSP < 0) {
         printf("RSPがstack_sizeを超えてしまいます\n");
         exit(1);
@@ -86,21 +102,46 @@ void ret_func_stack() {
     RBP = stack[RSP];
 }
 
+int TEXT_RSP = 0;
+void text_malloc(int size) {
+    if (TEXT_RSP + size >= TEXT) {
+        error_at(token->str, "TEXT領域の上限を超えました.\n");
+        exit(1);
+    }
+}
+
+long long int *write_text(char *str, int len) {
+    int i; 
+    long long int *res = &Text[TEXT_RSP];
+    for (i = 0; i < len; i++) {
+        Text[TEXT_RSP] = to_ascii(str);
+        if (*str == '\\') { len--; str++; }
+        str++;
+        TEXT_RSP++;
+    }
+    Text[TEXT_RSP] = 0;
+    TEXT_RSP++;
+    return res;
+}
+
 void print_local_stack(int len) {
     int i;
-    for (i = 0; i < len; i++)
+    printf("       stack dump       \n");
+    for (i = 1; i <= len; i++)
         printf(" %lld : %lld\n", &stack[LCL-i], stack[LCL-i]);
 }
 
 void print_global_stack(int len) {
     int i;
-    for (i = 0; i < len; i++)
+    printf("       global dump       \n");
+    for (i = 1; i <= len; i++)
         printf(" %lld : %lld\n", &stack[GLB-i], stack[GLB-i]);
 }
 
 void print_heap_stack(int len) {
     int i;
-    for (i = 0; i < len; i++)
+    printf("       heap dump       \n");
+    for (i = 1; i <= len; i++)
         printf(" %lld : %lld\n", &stack[HEAP-i], stack[HEAP-i]);
 }
 

@@ -21,12 +21,14 @@ void error_at(char *str, char *error) {
     for (end = str; end && *end != '\n'; end++) {}
     
     // file name and new line 
-    if (file_name) printf("File %s, ", file_name);
-    printf("Line %d\n    ", newlines);
-    
-    printf("%.*s\n", (int)(end - start), start);
-    
-    printf("\nError : %s\n", error);
+
+    printf("\n");
+    if (file_name) printf("%s", file_name);
+    printf(":%d: ", newlines);
+    printf(" Error : %s\n", error);
+    printf("       |\n");
+    printf(" %5d |   %.*s\n", newlines, (int)(end - start), start);
+    printf("       |\n");
     exit(1);
 }
 
@@ -83,9 +85,10 @@ int main(int argc, char **argv) {
     execute_main();
 
     printf("execute end\n");
-    print_local_stack(20);
+    printf("\n\n\n\n");
+    print_local_stack(15);
     printf("\n\n");
-    print_global_stack(10);
+    print_global_stack(5);
     printf("\n\n");
-    print_heap_stack(10);
+    print_heap_stack(5);
 }

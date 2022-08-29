@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include "grccnr.h"
 
 VarType *cfunc_type(Node *node) {
@@ -44,6 +47,12 @@ VarType *cfunc_type(Node *node) {
     }
 
     else if (strcmp("memcmp", node->func_name) == 0) {
+        p->ty = PTR;
+        p->ptr_to = calloc(1, sizeof(VarType));
+        p->ptr_to->ty = VOID;
+    }
+
+    else if (strcmp("memcpy", node->func_name) == 0) {
         p->ty = PTR;
         p->ptr_to = calloc(1, sizeof(VarType));
         p->ptr_to->ty = VOID;

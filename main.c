@@ -4,6 +4,9 @@
 char *user_input;
 Token *token;
 char *filename;
+char *output;
+int optimize;
+FILE *output_file;
 
 // エラーを警告するための関数
 // printfと同じ引数
@@ -49,12 +52,48 @@ void error_at(char *loc, char *fmt, ...) {
     exit(1);
 }
 
+// output, optimize, input取得
+void setOption(int argc, char *argv[]) {
+    optimize = 0;
+    output = "temp.s";
+    filename = NULL;
+
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp("-o", argv[i]))
+            if (argc > ++i) {
+                for (int j = 0; argv[i][j] && argv[i][j+1]; j++) {
+                    if (!strncmp(".s", &argv[i][j], 2))
+                        output = argv[i];
+                }
+                if (!output) {
+                    printf("expected : -o [output file]\n");
+                    exit(1);
+                }
+            } else {
+                printf("expected : -o [output file]\n");
+                exit(1);
+            }
+        else if (!strcmp("-O", argv[i]))
+            optimize = 1;
+        else {
+            for (int j = 0; argv[i][j] && argv[i][j+1] && argv[i][j+2]; j++)
+                if (!strncmp(".gc", &argv[i][j], 3))
+                    filename = argv[i];
+        }
+    }
+
+    if (!filename) {
+        printf("input file is not specify\n");
+        exit(1);
+    }
+}
+
 // 指定されたファイルの内容を返す
 char *read_file(char *path) {
     // ファイルを開く
     FILE *fp = fopen(path, "r");
     if (!fp)
-        error("cannot open %s : %s", path, strerror(errno));
+        error("cannot open <%s> : %s", path, strerror(errno));
     
     // ファイルの長さを調べる
     if (fseek(fp, 0, SEEK_END) == -1)
@@ -75,26 +114,29 @@ char *read_file(char *path) {
     return buf;
 }
 
-int main(int argc, char** argv){
-    if (argc != 2){
+int main(int argc, char *argv[]){
+    if (argc < 2){
 		fprintf(stderr, "引数の個数が正しくありません\n");
 		return 1;
 	}
-	
-	// トークナイズしてパースする
-    if (1) {
-        filename = argv[1];
-	    user_input = read_file(filename);
-    } 
-    else
-        user_input = argv[1];
 
+    setOption(argc, argv);
+    
+	// トークナイズしてパースする
+    user_input = read_file(filename);
+    
     token = tokenize();
     
 	program();
     
+    output_file = fopen(output, "w");
+    if (output_file == NULL) {
+        printf("cannot open output_file : <%s>\n", output);
+        exit(1);
+    }
+
 	// アセンブリの前半部分を出力
-	printf(".intel_syntax noprefix\n");
+	fprintf(output_file, ".intel_syntax noprefix\n");
 
     // グローバル変数
     gen_global_var();
@@ -104,5 +146,11 @@ int main(int argc, char** argv){
 	    // 抽象構文木を下りながらコード生成
 	    gen_func(code[i]);
     }
+    fclose(output_file);
+
+    if (optimize)
+        // asm読み込み
+        optimizeAsm(output);
+    
 	return 0;
 }

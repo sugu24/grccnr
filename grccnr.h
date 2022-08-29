@@ -41,6 +41,8 @@ extern char *arg_register[6][4]; // 引数を記憶するレジスタ
 extern int control;
 extern Func *now_func; // 自己呼び出し用
 
+extern FILE *output_file;
+
 // トークンの種類
 typedef enum {
 	TK_RESERVED, // 記号
@@ -124,6 +126,12 @@ typedef enum {
     ND_NOT,         // 37 not
     ND_NULL,        // 38 NULL
     ND_ASM,         // 39 asm
+    ND_LEFT_SHIFT,  // 40 <<
+    ND_RIGHT_SHIFT, // 41 >>
+    ND_AND,         // 42 &
+    ND_OR,          // 43 |
+    ND_XOR,         // 44 ^
+    ND_BIT_NOT,     // 45 ~
 } NodeKind;
 
 // 変数の型
@@ -273,8 +281,10 @@ Node *expr();
 Node *assign();
 Node *Ladd();
 Node *Land();
+Node *bit_calc();
 Node *equality();
 Node *relational();
+Node *shift();
 Node *add();
 Node *mul();
 Node *unary();
@@ -303,3 +313,6 @@ char *read_file(char *path);
 
 // ---------- cfunc ---------- //
 VarType *cfunc_type(Node *node);
+
+// ---------- optimize ---------- //
+void optimizeAsm(char *output);

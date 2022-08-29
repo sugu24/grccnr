@@ -50,9 +50,7 @@ int expect_number() {
 
 // アルファベットまたはアンダーバーならtrue
 int is_alpha(char c) {
-    return ('a' <= c && c <= 'z') ||
-           ('A' <= c && c <= 'Z') ||
-           (c == '_');
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') || (c == '_');
 }
 
 // 数字ならtrue
@@ -63,8 +61,7 @@ int is_num(char c) {
 // トークンの長さを返す
 int token_len(char *p) {
     int len = 0;
-    while ((len == 0 && is_alpha(*p)) || 
-           (len > 0 && (is_alpha(*p) || is_num(*p)))) {
+    while ((!len && is_alpha(*p)) || (len > 0 && (is_alpha(*p) || is_num(*p)))) {
         p++;
         len++;
     }
@@ -141,19 +138,20 @@ Token *tokenize() {
             continue;
         }
 
-		if (startswith(p, "||") || startswith(p, "&&")  || 
-            startswith(p, "==") || startswith(p, "!=")  || 
-            startswith(p, "<=") || startswith(p, ">=")  ||
-            startswith(p, "->") || startswith(p, "++")  ||
-            startswith(p, "--") || startswith(p, "+=")  ||
-            startswith(p, "-=") || startswith(p, "*=")  ||
-            startswith(p, "/=") || startswith(p, "%=")){
+		if (startswith(p, "||") || startswith(p, "&&") || 
+            startswith(p, "==") || startswith(p, "!=") || 
+            startswith(p, "<=") || startswith(p, ">=") ||
+            startswith(p, "->") || startswith(p, "++") ||
+            startswith(p, "--") || startswith(p, "+=") ||
+            startswith(p, "-=") || startswith(p, "*=") ||
+            startswith(p, "/=") || startswith(p, "%=") ||
+            startswith(p, ">>") || startswith(p, "<<")){
 			cur = new_token(TK_RESERVED, cur, p, 2);
 			p += 2;
 			continue;
 		}
 
-		if (strchr("+-*/%()<>;={}&,[].#:!", *p)) {
+		if (strchr("+-*/%()<>;={}&,[].#:|!^~", *p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
 		}
@@ -241,8 +239,8 @@ Token *tokenize() {
                 cur = new_token(TK_NULL, cur, p, len);
             else if (len == 6 && strncmp(p, "extern", len) == 0)
                 cur = new_token(TK_EXTERN, cur, p, len);
-            else if (len == 3 && strncmp(p, "asm", len) == 0)
-                cur = new_token(TK_ASM, cur, p, len);
+            // else if (len == 3 && strncmp(p, "asm", len) == 0)
+            //     cur = new_token(TK_ASM, cur, p, len);
             else
                 cur = new_token(TK_IDENT, cur, p, len);
             p += len;

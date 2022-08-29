@@ -296,6 +296,25 @@ VarType *AST_type(int ch, Node *node) {
             var_type = AST_type(ch, node->lhs);
             //printf("%d\n", var_type->ty);
             break;
+        case ND_LEFT_SHIFT:
+        case ND_RIGHT_SHIFT:
+            var_type = AST_type(ch, node->lhs);
+            AST_type(ch, node->rhs);
+            break;
+        case ND_AND:
+        case ND_OR:
+        case ND_XOR:
+            lhs_var_type = AST_type(ch, node->lhs);
+            rhs_var_type = AST_type(ch, node->rhs);
+
+            if (get_cal_size(lhs_var_type) >= get_cal_size(rhs_var_type))
+                var_type = lhs_var_type;
+            else
+                var_type = rhs_var_type;
+            break;
+        case ND_BIT_NOT:
+            var_type = AST_type(ch, node->lhs);
+            break;
         case ND_EQ:
             lhs_var_type = AST_type(ch, node->lhs);
             rhs_var_type = AST_type(ch, node->rhs);

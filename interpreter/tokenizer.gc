@@ -126,6 +126,7 @@ Token *tokenizer(char *p) {
     isstr = 0;
     
     while (*p) {
+        // printf("%20s\n", p);
         // 空白スキップ
         if (isspace(*p)) {
             p++;
@@ -140,19 +141,20 @@ Token *tokenizer(char *p) {
             continue;
         }
         
-        if (startswith(p, "||") || startswith(p, "&&")  || 
-            startswith(p, "==") || startswith(p, "!=")  || 
-            startswith(p, "<=") || startswith(p, ">=")  ||
-            startswith(p, "->") || startswith(p, "++")  ||
-            startswith(p, "--") || startswith(p, "+=")  ||
-            startswith(p, "-=") || startswith(p, "*=")  ||
-            startswith(p, "/=") || startswith(p, "%=")) {
+        if (startswith(p, "||") || startswith(p, "&&") || 
+            startswith(p, "==") || startswith(p, "!=") || 
+            startswith(p, "<=") || startswith(p, ">=") ||
+            startswith(p, "->") || startswith(p, "++") ||
+            startswith(p, "--") || startswith(p, "+=") ||
+            startswith(p, "-=") || startswith(p, "*=") ||
+            startswith(p, "/=") || startswith(p, "%=") ||
+            startswith(p, ">>") || startswith(p, "<<")) {
             cur = new_token(TK_RESERVED, cur, p, 2);
             p++; p++;
             continue;
         }
         
-        if (strchr("+-*/%()<>;={}&,[].#:", *p)) {
+        if (strchr("+-*/%()<>;={}&,[].#:^|~", *p)) {
 			cur = new_token(TK_RESERVED, cur, p++, 1);
 			continue;
 		}

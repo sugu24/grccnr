@@ -1002,7 +1002,7 @@ Node *Ladd() {
 
 // Land = equality ("&&" equality)*
 Node *Land() {
-    Node *node = equality();
+    Node *node = bit_calc();
 
     for (;;) {
         if (consume("&&"))
@@ -1010,6 +1010,21 @@ Node *Land() {
         else
             return node;
         node->control = and_add++;
+    }
+}
+
+Node *bit_calc() {
+    Node *node = equality();
+
+    for (;;) {
+        if (consume("|"))
+            node = new_binary(ND_OR, node, bit_calc());
+        else if (consume("^"))
+            node = new_binary(ND_XOR, node, bit_calc());
+        else if (consume("&"))
+            node = new_binary(ND_AND, node, bit_calc());
+        else
+            return node;
     }
 }
 
@@ -1029,20 +1044,33 @@ Node *equality() {
 
 // relational = add ("<" add | "<=" add | ">" add | ">=" add)*
 Node *relational() {
-	Node *node = add();
+	Node *node = shift();
 
 	for (;;) {
 		if (consume("<"))
-			node = new_binary(ND_LT, node, add());
+			node = new_binary(ND_LT, node, shift());
 		else if (consume("<="))
-			node = new_binary(ND_LE, node, add());
+			node = new_binary(ND_LE, node, shift());
 		else if (consume(">"))
-			node = new_binary(ND_LT, add(), node);
+			node = new_binary(ND_LT, shift(), node);
 		else if (consume(">="))
-			node = new_binary(ND_LE, add(), node);
+			node = new_binary(ND_LE, shift(), node);
 		else
 			return node;
 	}
+}
+
+Node *shift() {
+    Node *node = add();
+
+    for (;;) {
+        if (consume("<<"))
+            node = new_binary(ND_LEFT_SHIFT, node, add());
+        else if (consume(">>"))
+            node = new_binary(ND_RIGHT_SHIFT, node, add());
+        else
+            return node;
+    }
 }
 
 // add = mul("+" mul | "-" mul)*
@@ -1100,6 +1128,8 @@ Node *unary() {
 		return new_binary(ND_SUB, new_num(0), unary());
     else if (consume("!"))
         return new_binary(ND_NOT, unary(), NULL);
+    else if (consume("~"))
+        return new_binary(ND_BIT_NOT, unary(), NULL);
     else if (consume("*"))
         return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&"))

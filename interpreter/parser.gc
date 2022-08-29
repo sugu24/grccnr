@@ -3,6 +3,7 @@
 typedef struct Control Control;
 struct Control {
     Node *node;
+    Var *loc;
     Node *before;
 };
 
@@ -84,12 +85,12 @@ Struct *get_struct(char *str, int len) {
 }
 
 // 引数でもらったStructからtokと同じメンバ変数のlvarを返す
-Var *get_membar(Struct *struct_p, Token *tok) {
-    Var *membar;
-    for (membar = struct_p->membar; membar; membar = membar->next) {
-        if (tok->len == membar->len &&
-            !memcmp(tok->str, membar->name, tok->len))
-            return membar;
+Var *get_member(Struct *struct_p, Token *tok) {
+    Var *member;
+    for (member = struct_p->member; member; member = member->next) {
+        if (tok->len == member->len &&
+            !memcmp(tok->str, member->name, tok->len))
+            return member;
     }
     return NULL;
 }
@@ -125,14 +126,14 @@ Func *find_func(char *name, int len) {
 }
 
 // enumのメンバ変数を返す
-Node *find_enum_membar(Token *tok) {
+Node *find_enum_member(Token *tok) {
     Enum *enum_p;
-    EnumMem *membar;
+    EnumMem *member;
     for (enum_p = enums; enum_p; enum_p = enum_p->next) {
-        for (membar = enum_p->membar; membar; membar = membar->next) {
-            if (tok->len == membar->len &&
-                !memcmp(tok->str, membar->name, membar->len))
-                return membar->num_node;
+        for (member = enum_p->member; member; member = member->next) {
+            if (tok->len == member->len &&
+                !memcmp(tok->str, member->name, member->len))
+                return member->num_node;
         }
     }
 
@@ -142,9 +143,9 @@ Node *find_enum_membar(Token *tok) {
 // structのtypeを生成する
 Struct *new_struct() {
     Struct *struct_p;
-    Var *membar;
-    Var *top_membar;
-    Var *cur_membar;
+    Var *member;
+    Var *top_member;
+    Var *cur_member;
     VarType *type;
     Token *tok;
     Typedef *typedef_;
@@ -152,9 +153,10 @@ Struct *new_struct() {
 
     // タグ名があるか
     tok = consume_kind(TK_IDENT);
-    if (tok && (struct_p = get_struct(tok->str, tok->len)))
+    if (tok && (struct_p = get_struct(tok->str, tok->len))) {
         // 既に定義されたタグ名ならそれを返す
         return struct_p;
+    }
 
     // 新しいstructの生成
     struct_p = calloc(1, sizeof(Struct));
@@ -167,30 +169,34 @@ Struct *new_struct() {
     if (!consume("{"))
         return struct_p;
 
-    offset = -1;
+    offset = 0;
 
     // declare_varの引数が0なのは
     // 初期化、typedef、structなしだから
-    top_membar = cur_membar = calloc(1, sizeof(Var));
+    top_member = cur_member = calloc(1, sizeof(Var));
     while (type = new_var_type(0)) {
         while (1) {
-            membar = declare_var(0, type);
-            offset += get_stack_size(membar->type);
-            membar->offset = offset;
-            cur_membar->next = membar;
-            cur_membar = membar;
+            member = declare_var(0, type);
+            if (member->type->ty == ARRAY && !(member->type->array_size)) 
+                error_at(token->str, "flexible array member not at end of struct");
+            offset += get_stack_size(member->type);
+            member->offset = offset;
+            cur_member->next = member;
+            cur_member = member;
             
             if (consume(",")) continue;
             else if (consume(";")) break;
             else error_at(token->str, "there is not ; after declare var");
         }
     }
-    struct_p->membar = top_membar->next;
+    struct_p->member = top_member->next;
 
     // offsetを逆にする
-    for (membar = top_membar; membar; membar = membar->next)
-        membar->offset = offset - membar->offset;
-
+    struct_p->size = offset;
+    for (member = top_member; member; member = member->next) {
+        member->offset = offset - member->offset;
+    }
+    
     // structのメンバ変数ブロック終了
     expect("}");
 
@@ -216,14 +222,14 @@ Enum *new_enum() {
     Typedef *typedef_;
     Enum *enum_p;
     Token *tok;
-    EnumMem *membar;
-    EnumMem *last_membar;
+    EnumMem *member;
+    EnumMem *last_member;
     int val; // メンバの数字
     int sign;
 
     // タグ名があるか
     tok = consume_kind(TK_IDENT);
-    if (tok && (enum_p = find_enum_membar(tok)))
+    if (tok && (enum_p = find_enum_member(tok)))
         // 既に定義されたタグ名ならそれを返す
         return enum_p;
     
@@ -240,12 +246,12 @@ Enum *new_enum() {
         return enum_p;
 
     // enumのカッコ内の値をenumに追加
-    last_membar = NULL;
+    last_member = NULL;
     val = 0;
     while (tok = consume_kind(TK_IDENT)) {
-        membar = calloc(1, sizeof(EnumMem));
-        membar->name = tok->str;
-        membar->len = tok->len;
+        member = calloc(1, sizeof(EnumMem));
+        member->name = tok->str;
+        member->len = tok->len;
         if (consume("=")) {
             if (consume("-"))
                 sign = -1;
@@ -258,14 +264,14 @@ Enum *new_enum() {
                 error_at(token->str, "only number after enum member");
             
         }
-        membar->num_node = new_node(ND_NUM);
-        membar->num_node->val = val;
-        membar->next = last_membar;
-        last_membar = membar;
+        member->num_node = new_node(ND_NUM);
+        member->num_node->val = val;
+        member->next = last_member;
+        last_member = member;
         expect(",");
         val++;
     }
-    enum_p->membar = last_membar;
+    enum_p->member = last_member;
 
     // structのメンバ変数ブロック終了
     expect("}");
@@ -284,18 +290,11 @@ Enum *new_enum() {
     return enum_p;
 }
 
-// ヒープ領域にコピーしてそれを指す
+// TEXT領域にコピーしてそれを指す
 char *str_copy(Token *tok) {
-    int i;
-    int j = 0;
-    char *temp = malloc(sizeof(char) * (tok->len + 1));
-    for (i = 0; i < tok->len; i++) {
-        temp[j] = to_ascii((tok->str + i));
-        if (tok->str[i] == '\\') i++;
-        j++;
-    }
-    temp[j] = '\0';
-    return temp;
+    text_malloc(tok->len);
+    char *write_area = write_text(tok->str, tok->len);
+    return write_area;
 }
 
 // ---------- type ---------- //
@@ -397,7 +396,7 @@ VarType *new_var_type(int type) {
 // RBPからのオフセットを設定
 void set_offset(Var **var, int type) {
     int offset = get_stack_size((*var)->type);
-
+    
     if (type == 2) {
         if (globals)
             (*var)->offset = globals->offset + offset;
@@ -471,9 +470,9 @@ Var *declare_var(int type, VarType *var_type) {
                 array_now->array_size = expect_number();
                 if (array_now->array_size <= 0)
                     error_at(token->str, "配列のサイズは正の整数である必要があります");
-            } 
+            }
             else if (tok = consume_kind(TK_IDENT)) {
-                if (node = find_enum_membar(tok)) {
+                if (node = find_enum_member(tok)) {
                     array_now->array_size = node->val;
                     if (array_now->array_size <= 0)
                         error_at(token->str, "array size must be plus.");                    
@@ -583,7 +582,8 @@ Func *global() {
 
                 if (node) 
                     error_at(token->str, "initializer element is not constant");
-            }
+            } else if (var->type->ty == ARRAY && !(var->type->array_size)) 
+                error_at(token->str, "array size missing");
 
             // voidかたはNG
             if (var->type->ty == VOID)
@@ -600,6 +600,35 @@ Func *global() {
     }
 }
 
+
+Node *dec() {
+    Node *head_node;
+    Node *cur_node;
+    Var *var;
+    VarType *var_type;
+    
+    head_node = cur_node = calloc(1, sizeof(Node));
+    if (var_type = new_var_type(1)) {
+        while (1) {
+            var = declare_var(1, var_type);
+            if (consume("=")) {
+                cur_node->next_stmt = initialize(var, 1);
+                while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
+            } else if (var->type->ty == ARRAY && !(var->type->array_size)) 
+                error_at(token->str, "array size missing");
+            
+            var->next = locals;
+            locals = var;
+
+            if (consume(",")) continue;
+            else if (token_str(";")) break;
+            else error_at(token->str, "there is not ; after declare var");
+        }
+        return head_node->next_stmt;
+    } else
+        return NULL;
+}
+
 Node *func_stmt() {
     Node *head_node;
     Node *cur_node;
@@ -609,13 +638,16 @@ Node *func_stmt() {
 
     head_node = cur_node = calloc(1, sizeof(Node));
     while (1) {
+        /*
         if (var_type = new_var_type(1)) {
             while (1) {
                 var = declare_var(1, var_type);
                 if (consume("=")) {
                     cur_node->next_stmt = initialize(var, 1);
                     while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
-                }
+                } else if (var->type->ty == ARRAY && !(var->type->array_size)) 
+                    error_at(token->str, "array size missing");
+                
                 var->next = locals;
                 locals = var;
 
@@ -623,14 +655,15 @@ Node *func_stmt() {
                 else if (consume(";")) break;
                 else error_at(token->str, "there is not ; after declare var");
             }
-        } else {
-            if (!(node = stmt(cur_node))) {
-                if (!controls) break;
-                else continue;
-            }
-            cur_node->next_stmt = node;
-            while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
+        } else { */
+
+        if (!(node = stmt(cur_node))) {
+            if (!controls) break;
+            else continue;
         }
+        cur_node->next_stmt = node;
+        while (cur_node->next_stmt) cur_node = cur_node->next_stmt;
+        // }
     }
     return head_node;
 }
@@ -651,21 +684,34 @@ Node *stmt(Node *cur_node) {
     Var *var;
     Control *c;
 
+    Token *tok = NULL;
+    while (tok = token) {
+        if (!controls || controls->node->kind == ND_BLOCK)
+            node = dec();
+        if (tok == token)
+            break;
+        expect(";");
+        if (node)
+            return node;
+    }
+
     if (consume("{")) {
         c = calloc(1, sizeof(Control));
         c->node = new_node(ND_BLOCK);
+        c->loc = locals;
         c->before = controls;
         controls = c;
         return c->node;
     } 
     else if (consume("}")) {
         node = new_node(ND_BLOCK_END);
-        
+
         if (!controls)
             return NULL;
-        else if (controls->node->kind != ND_BLOCK)
+        if (controls->node->kind != ND_BLOCK)
             error_at(token->str, "対応する } がありません");
 
+        locals = controls->loc;
         controls = controls->before;
 
         block_node = node;
@@ -673,6 +719,7 @@ Node *stmt(Node *cur_node) {
         while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
             set_jump_to(controls->node, block_node, end_node);
+            locals = controls->loc;
             controls = controls->before;
             node->next_stmt = end_node;
             block_node = end_node;
@@ -684,6 +731,7 @@ Node *stmt(Node *cur_node) {
         c = calloc(1, sizeof(Control));
         node = new_node(ND_WHILE);
         c->node = node;
+        c->loc = locals;
         expect("(");
         node->lhs = expr();
         expect(")");
@@ -697,12 +745,19 @@ Node *stmt(Node *cur_node) {
         node = new_node(ND_FOR_START);
         node->next_stmt = new_node(ND_FOR);
         c->node = node->next_stmt;
+        c->loc = locals;
         expect("(");
-        node->next_stmt->lhs = expr();
+        
+        if (!(node->next_stmt->lhs = dec()))
+            node->next_stmt->lhs = expr();
+        
         expect(";");
+        
         node->next_stmt->mhs = expr();
         expect(";");
+        
         node->next_stmt->rhs = expr();
+        
         expect(")");
         
         c->before = controls;
@@ -713,6 +768,7 @@ Node *stmt(Node *cur_node) {
         c = calloc(1, sizeof(Control));
         node = new_node(ND_IF);
         c->node = node;
+        c->loc = locals;
         expect("(");
         node->lhs = expr();
         expect(")");
@@ -737,6 +793,7 @@ Node *stmt(Node *cur_node) {
 
             c = calloc(1, sizeof(Control));
             c->node = node;
+            c->loc = locals;
 
             c->before = controls;
             controls = c;
@@ -748,6 +805,7 @@ Node *stmt(Node *cur_node) {
         c = calloc(1, sizeof(Control));
         node = new_node(ND_SWITCH);
         c->node = node;
+        c->loc = locals;
         expect("(");
         node->lhs = expr();
         expect(")");
@@ -807,6 +865,7 @@ Node *stmt(Node *cur_node) {
         while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
             set_jump_to(controls->node, block_node, end_node);
+            locals = controls->loc;
             controls = controls->before;
             node->next_stmt = end_node;
             block_node = end_node;
@@ -829,6 +888,7 @@ Node *stmt(Node *cur_node) {
         while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
             set_jump_to(controls->node, block_node, end_node);
+            locals = controls->loc;
             controls = controls->before;
             node->next_stmt = end_node;
             block_node = end_node;
@@ -853,6 +913,7 @@ Node *stmt(Node *cur_node) {
         while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
             set_jump_to(controls->node, block_node, end_node);
+            locals = controls->loc;
             controls = controls->before;
             node->next_stmt = end_node;
             block_node = end_node;
@@ -861,10 +922,11 @@ Node *stmt(Node *cur_node) {
     else {
         node = expr();
         block_node = node;
-
+    
         while (controls && controls->node->kind != ND_BLOCK) {
             end_node = new_node(ND_CONTROL_END);
             set_jump_to(controls->node, block_node, end_node);
+            locals = controls->loc;
             controls = controls->before;
             node->next_stmt = end_node;
             block_node = end_node;
@@ -874,7 +936,14 @@ Node *stmt(Node *cur_node) {
     return node;
 }
 
+
 Node *expr() {
+    if (token_str(";"))
+        return NULL;
+        
+    if (new_var_type(2))
+        error_at(token->str, "expected expression before value declaretion");
+
     Node *node = assign();
     AST_type(1, node);
     return node;
@@ -900,7 +969,6 @@ Node *assign() {
 
 Node *Ladd() {
     Node *node = Land();
-    
     while(1) {
         if (consume("||")) 
             node = new_binary(ND_LOGICAL_ADD, node, Ladd());
@@ -910,11 +978,26 @@ Node *Ladd() {
 }
 
 Node *Land() {
-    Node *node = equality();
+    Node *node = bit_calc();
     
     while(1) {
         if (consume("&&"))
             node = new_binary(ND_LOGICAL_AND, node, Land());
+        else
+            return node;
+    }
+}
+
+Node *bit_calc() {
+    Node *node = equality();
+
+    for (;;) {
+        if (consume("|"))
+            node = new_binary(ND_OR, node, bit_calc());
+        else if (consume("^"))
+            node = new_binary(ND_XOR, node, bit_calc());
+        else if (consume("&"))
+            node = new_binary(ND_AND, node, bit_calc());
         else
             return node;
     }
@@ -934,20 +1017,33 @@ Node *equality() {
 }
 
 Node *relational() {
-    Node *node = add();
+    Node *node = shift();
     
     while(1) {
 		if (consume("<"))
-			node = new_binary(ND_LT, node, add());
+			node = new_binary(ND_LT, node, shift());
 		else if (consume("<="))
-			node = new_binary(ND_LE, node, add());
+			node = new_binary(ND_LE, node, shift());
 		else if (consume(">"))
-			node = new_binary(ND_LT, add(), node);
+			node = new_binary(ND_LT, shift(), node);
 		else if (consume(">="))
-			node = new_binary(ND_LE, add(), node);
+			node = new_binary(ND_LE, shift(), node);
 		else
 			return node;
 	}
+}
+
+Node *shift() {
+    Node *node = add();
+
+    for (;;) {
+        if (consume("<<"))
+            node = new_binary(ND_LEFT_SHIFT, node, add());
+        else if (consume(">>"))
+            node = new_binary(ND_RIGHT_SHIFT, node, add());
+        else
+            return node;
+    }
 }
 
 Node *add() {
@@ -1006,6 +1102,8 @@ Node *unary() {
         return new_binary(ND_SUB, new_num(0), unary());
     else if (consume("!"))
         return new_binary(ND_NOT, unary(), NULL);
+    else if (consume("~"))
+        return new_binary(ND_BIT_NOT, unary(), NULL);
     else if (consume("*")) 
         return new_binary(ND_DEREF, unary(), NULL);
     else if (consume("&")) {
@@ -1085,7 +1183,7 @@ Node *primary() {
             node->argc = argc;
         }
         else {
-            if (node = find_enum_membar(tok))
+            if (node = find_enum_member(tok))
                 return node;
 
             node = new_node(ND_LVAR);
@@ -1125,29 +1223,32 @@ Node *attach(Node *node) {
     Token *tok;
     VarType *type = AST_type(0, node);
     
-    // (assign), ->membar, .membar, [assign] の繰り返し
+    // (assign), ->member, .member, [assign] の繰り返し
 	while (1) {
         if (consume("[")) {
+            // printf("%d %d %5s\n", node->access, type->ty, token->str);
             if (type->ty != PTR && type->ty != ARRAY)
                 error_at(token->str, "配列またはポインタ以外に添え字が付けられています");
             
             type = type->ptr_to;
-            node->access = 1;
-            node = new_binary(ND_INDEX, node, new_binary(ND_MUL, new_num(get_stack_size(type)), assign()));
+            if (original_type(type) == CHAR)
+                node = new_binary(ND_INDEX, node, new_binary(ND_MUL, new_num(get_size(type)), assign()));
+            else
+                node = new_binary(ND_INDEX, node, new_binary(ND_MUL, new_num(get_stack_size(type)), assign()));
             expect("]");
         }
         else if (consume(".")) {
             if (type->ty != STRUCT)
-                error_at(token->str, "左の候がstructでははありません");
+                error_at(token->str, "左の項がstructでははありません");
             if (!(tok = consume_kind(TK_IDENT))) 
                 error_at(token->str, "メンバ変数である必要があります");
-            if (!(var = get_membar(type->struct_p, tok)))
+            if (!(var = get_member(type->struct_p, tok)))
                 error_at(token->str, "メンバ変数である必要があります");
                 
             node->access = 1;
-            mem_node = new_node(ND_MEMBAR);
+            mem_node = new_node(ND_MEMBER);
             mem_node->var = var;
-            node = new_binary(ND_MEMBAR_ACCESS, node, mem_node);
+            node = new_binary(ND_MEMBER_ACCESS, node, mem_node);
             type = var->type;
         }
         else if (consume("->")) {
@@ -1155,13 +1256,13 @@ Node *attach(Node *node) {
                 error_at(token->str, "左の候がstructのポインタではありません");
             if (!(tok = consume_kind(TK_IDENT)))
                 error_at(token->str, "メンバ変数である必要があります");
-            if (!(var = get_membar(type->ptr_to->struct_p, tok))) 
+            if (!(var = get_member(type->ptr_to->struct_p, tok))) 
                 error_at(token->str, "メンバ変数である必要があります");
             node->access = 1;
-            mem_node = new_node(ND_MEMBAR);
+            mem_node = new_node(ND_MEMBER);
             mem_node->var = var;
             node = new_binary(ND_DEREF, node, NULL);
-            node = new_binary(ND_MEMBAR_ACCESS, node, mem_node);
+            node = new_binary(ND_MEMBER_ACCESS, node, mem_node);
             type = var->type;
             if (type->ty == PTR && type->ptr_to->ty == STRUCT)
                 type->ptr_to->struct_p = get_struct(type->ptr_to->struct_p->name, type->ptr_to->struct_p->len);

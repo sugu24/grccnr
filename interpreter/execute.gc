@@ -31,10 +31,10 @@ void get_offset(Node *node) {
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            p = a + b * 8;
+            p = a + b;
             // printf("offset %lld %lld", b, a);
             break;
-        case ND_MEMBAR_ACCESS:
+        case ND_MEMBER_ACCESS:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
@@ -98,7 +98,7 @@ long long int execute_function(Node *node) {
     for (i = i - 1; arg_var; i--) {
         offset = (long long int)get_stack_addr(0, arg_var->offset);
         val = arg[i];
-        stack_set(offset, val);
+        stack_set(offset, val, original_type(arg_var->type));
         arg_var = arg_var->next;
     }
     
@@ -126,6 +126,7 @@ void set_next_exec_node() {
         case ND_ELSE_IF:
         case ND_ELSE:
             exec_node = exec_node->next_stmt;
+            
             break;
         case ND_CONTINUE:
             exec_node = exec_node->jump_to;
@@ -163,23 +164,28 @@ void execute_while() {
 
 void execute_for() {
     if (control_infos->loop == 0) {
-        if (exec_node->lhs) execute_cal(exec_node->lhs);
+        Node *for_init_assign = exec_node->lhs;
+        while (for_init_assign) {
+            execute_cal(for_init_assign);
+            for_init_assign = for_init_assign->next_stmt;
+        }
     } else {
         if (exec_node->rhs) {
             execute_cal(exec_node->rhs);
             stack_pop();
         }
     }
-
+    
     if (exec_node->mhs) 
         execute_cal(exec_node->mhs);
     else
         stack_push(1);
-
+    
     control_infos->loop++;
     if (!stack_pop()) {
         exec_node = exec_node->jump_to;
         delete_control_infos();
+        stack_pop();
     }
 }
 
@@ -263,13 +269,11 @@ void execute_stmt() {
             control_infos = control_info;
             return;
         case ND_WHILE:
-            printf("while %p", exec_node);
             execute_while();
             return;
         case ND_FOR:
             if (control_infos->node->kind != ND_FOR)
                 error_at(exec_node->tok_str, "forのControlInfoではありません");
-
             execute_for();
             return;
         case ND_IF:
@@ -417,10 +421,50 @@ void execute_cal(Node *node) {
             a = stack_pop();
             c = !a;
             break;
+        case ND_LEFT_SHIFT:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a << b;
+            break;
+        case ND_RIGHT_SHIFT:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a >> b;
+            break;
+        case ND_AND:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a & b;
+            break;
+        case ND_OR:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a | b;
+            break;
+        case ND_XOR:
+            execute_cal(node->lhs);
+            execute_cal(node->rhs);
+            b = stack_pop();
+            a = stack_pop();
+            c = a ^ b;
+            break;
+        case ND_BIT_NOT:
+            execute_cal(node->lhs);
+            a = stack_pop();
+            c = ~a;
+            break;
         case ND_LVAR:
             c = (long long int)get_stack_addr(node->var->glb_var, node->var->offset);
             if (!node->access)
-                c = stack_text_get(c);
+                c = stack_text_get(c, original_type(node->type));
             break;
         case ND_NUM:
             c = node->val;
@@ -433,12 +477,14 @@ void execute_cal(Node *node) {
             c = stack_pop();
             break;
         case ND_VAR_ADD:
-            offset = (long long int)get_stack_addr(node->lhs->var->glb_var, node->lhs->var->offset);
-            c = stack_text_get(offset);
+            get_offset(node->lhs);
+            offset = stack_pop();
+            c = stack_text_get(offset, original_type(node->lhs->type));
             break;
         case ND_VAR_SUB:
-            offset = (long long int)get_stack_addr(node->lhs->var->glb_var, node->lhs->var->offset);
-            c = stack_text_get(offset);
+            get_offset(node->lhs);
+            offset = stack_pop();
+            c = stack_text_get(offset, original_type(node->lhs->type));
             break;
         case ND_PRINTF:
             execute_printf(node);
@@ -485,22 +531,22 @@ void execute_cal(Node *node) {
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
-            c = a + b * 8;
+            c = a + b;
             if (!node->access)
-                c = stack_text_get( c );
+                c = stack_text_get(c, original_type(node->lhs->type));
             break;
-        case ND_MEMBAR:
+        case ND_MEMBER:
             c = (long long int)node->var->offset;
             stack_push( c * 8 );
             return;
-        case ND_MEMBAR_ACCESS:
+        case ND_MEMBER_ACCESS:
             execute_cal(node->lhs);
             execute_cal(node->rhs);
             b = stack_pop();
             a = stack_pop();
             c = a + b;
             if (!node->access)
-                c = stack_text_get(c);
+                c = stack_text_get(c, original_type(node->lhs->type));
             break;
         case ND_CAST:
             execute_cal(node->lhs);
@@ -532,16 +578,17 @@ void execute_cal(Node *node) {
     
     switch (node->kind) {
         case ND_ASSIGN:
-            stack_set(offset, c);
+            stack_set(offset, c, original_type(node->lhs->type));
+            // printf("offset %lld c %lld %.20s\n", offset, c, node->tok_str);
             break;
         case ND_VAR_ADD:
             c++;
-            stack_set(offset, c);
+            stack_set(offset, c, original_type(node->lhs->type));
             c--;
             break;
         case ND_VAR_SUB:
             c--;
-            stack_set(offset, c);
+            stack_set(offset, c, original_type(node->lhs->type));
             c++;
             break;
     }
@@ -643,7 +690,7 @@ void execute_scanf(Node *node) {
     if (argc_ > 6)
         error_at(exec_node->tok_str, "scanfの引数は6個以下");
     else if (argc_ <= 1)
-        error_at(exec_node->tok_str, "scanffの引数が足りません");
+        error_at(exec_node->tok_str, "scanfの引数が足りません");
 
     arg = node->args->next_stmt;
     if (argc_ > 0) {

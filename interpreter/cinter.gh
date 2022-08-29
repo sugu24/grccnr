@@ -87,8 +87,8 @@ enum NodeKind {
     ND_STR,     // 23 文字リテラル
     ND_CHAR,    // 24 1文字
     ND_INDEX,   // 25 []
-    ND_MEMBAR,  // 26 メンバ変数
-    ND_MEMBAR_ACCESS, // 27 struct.membar
+    ND_MEMBER,  // 26 メンバ変数
+    ND_MEMBER_ACCESS, // 27 struct.member
     ND_VAR_ADD, // 28 ++
     ND_VAR_SUB, // 29 --
     ND_LOGICAL_ADD, // 30 ||
@@ -109,6 +109,12 @@ enum NodeKind {
     ND_MALLOC,      // 45
     ND_FREE,        // 46
     ND_CAST,        // 47
+    ND_LEFT_SHIFT,  // 48 <<
+    ND_RIGHT_SHIFT, // 49 >>
+    ND_AND,         // 50 &
+    ND_OR,          // 51 |
+    ND_XOR,         // 52 ^
+    ND_BIT_NOT,     // 53 ~
 };
 
 struct Node {
@@ -182,7 +188,7 @@ struct Enum {
     Enum *next;    // 次のenumメンバ
     char *name;
     int len;
-    EnumMem *membar;  // enum内のメンバ
+    EnumMem *member;  // enum内のメンバ
 };
 
 // enumのメンバの型
@@ -206,8 +212,9 @@ struct Struct {
     Struct *next;  // 次のstruct
     char *name;    // タグ名
     int len;       // len(タグ名)
-    Var *membar;  // メンバ変数(ND_NUM)
-}; 
+    Var *member;  // メンバ変数(ND_NUM)
+    int size;
+};
 
 extern char *user_input;
 extern Token *token;
@@ -250,8 +257,10 @@ Node *expr();
 Node *assign();
 Node *Ladd();
 Node *Land();
+Node *bit_calc();
 Node *equality();
 Node *relational();
+Node *shift();
 Node *add();
 Node *mul();
 Node *unary();
@@ -262,12 +271,14 @@ Node *addadd_minusminus(Node *node);
 // ---------- stack ---------- //
 long long int stack_pop();
 void stack_push(long long int val);
-long long int stack_text_get(long long int offset);
+long long int stack_text_get(long long int offset, Type type);
 long long int *get_stack_addr(int is_global_var, long long int offset);
-void stack_set(long long int offset, long long int val);
+void stack_set(long long int offset, long long int val, Type type);
 void stack_malloc(int size);
 void call_func_stack();
 void ret_func_stack();
+void text_malloc(int size);
+long long int *write_text(char *str, int len);
 void print_local_stack(int len);
 void print_global_stack(int len);
 void print_heap_stack(int len);
@@ -292,6 +303,7 @@ long long int *execute_calloc(Node *node);
 void execute_free(Node *node);
 
 // ---------- AST_type ---------- //
+Type original_type(VarType *type);
 long long int get_size(VarType *type);
 int get_stack_size(VarType *type);
 int returnable(VarType *ltype, VarType* rtype);
