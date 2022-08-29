@@ -44,7 +44,7 @@ long long int *get_stack_addr(int is_global_var, long long int offset) {
         offset = RBP - offset;
         
     if (offset < 0 || GLB < offset)
-        error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています1\n");
+        error_at(exec_node->tok_str, "segmentation fault");
     
     return &stack[offset];
 }
@@ -61,7 +61,7 @@ long long int stack_text_get(long long int offset, Type type) {
         } else
             return stack[(offset - stack_address) / 8];
     else 
-        error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています2\n");
+        error_at(exec_node->tok_str, "segmentation fault");
     // print_local_stack(5);
 }
 
@@ -79,7 +79,7 @@ void stack_set(long long int offset, long long int val, Type type) {
         } else
             stack[(offset - stack_address) / 8] = val;
     } else
-        error_at(exec_node->tok_str, "memoryのindexがstack_sizeを超えています3\n");
+        error_at(exec_node->tok_str, "segmentation fault");
     // print_local_stack(5);
 }
 
