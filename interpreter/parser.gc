@@ -268,7 +268,7 @@ Enum *new_enum() {
         member->num_node->val = val;
         member->next = last_member;
         last_member = member;
-        expect(",");
+        if (!consume(",")) break;
         val++;
     }
     enum_p->member = last_member;
@@ -928,7 +928,7 @@ Node *stmt(Node *cur_node) {
             set_jump_to(controls->node, block_node, end_node);
             locals = controls->loc;
             controls = controls->before;
-            node->next_stmt = end_node;
+            block_node->next_stmt = end_node;
             block_node = end_node;
         }
     }
