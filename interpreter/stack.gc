@@ -141,8 +141,8 @@ void print_global_stack(int len) {
 void print_heap_stack(int len) {
     int i;
     printf("       heap dump       \n");
-    for (i = 1; i <= len; i++)
-        printf(" %lld : %lld\n", &stack[HEAP-i], stack[HEAP-i]);
+    for (i = 0; i < len; i++)
+        printf(" %lld : %lld\n", &stack[i], stack[i]);
 }
 
 // ---------------------- heap領域 ---------------------- //
@@ -150,16 +150,16 @@ int heap_head;
 int heap_tail;
 enum {
     NOT_FOUND = -10,
-    NEXT_BLOCK = -1,
+    NEXT_BLOCK = 1,
     TAIL_BLOCK = -2,
     NONE_BEFORE = -3,
 };
 
 void init_memory() {
-    stack[HEAP] = HEAP + 1;
-    stack[HEAP + NEXT_BLOCK] = TAIL_BLOCK;
-    heap_head = HEAP;
-    heap_tail = HEAP;
+    stack[0] = HEAP + 1;
+    stack[NEXT_BLOCK] = TAIL_BLOCK;
+    heap_head = 0;
+    heap_tail = 0;
 }
 
 int best_fit(int size) {
@@ -187,9 +187,8 @@ int best_fit(int size) {
 long long int *heap_alloc(int size) {
     int before_offset;
     int found_offset;
-
+    
     before_offset = best_fit(size);
-
     if (before_offset == NOT_FOUND) {
         printf("heap area is fulled\n");
         exit(1);
@@ -208,15 +207,16 @@ long long int *heap_alloc(int size) {
     
     if (before_offset == heap_tail)
         heap_tail = stack[before_offset + NEXT_BLOCK];
+    
     // stack[found_offset]には確保したsizeが入っている
-    return &stack[found_offset-1];
+    return &stack[found_offset+1];
 }
 
 int do_alloc(int found_offset, int size) {
     int next_offset;
-
+    
     if (stack[found_offset] > size+1+2) {
-        next_offset = found_offset - (size + 1);
+        next_offset = found_offset + (size + 1);
         stack[next_offset + NEXT_BLOCK] = stack[found_offset + NEXT_BLOCK];
         stack[next_offset] = stack[found_offset] - (size + 1);
         stack[found_offset] = size + 1;
@@ -235,7 +235,7 @@ void dealloc(long long int free_address) {
     int free_offset;
     
     free_offset = (free_address - stack_address) / 8;
-    stack[heap_tail + NEXT_BLOCK] = free_offset + 1;
-    heap_tail = free_offset + 1;
+    stack[heap_tail + NEXT_BLOCK] = free_offset - 1;
+    heap_tail = free_offset - 1;
     stack[free_offset] = TAIL_BLOCK;
 }
